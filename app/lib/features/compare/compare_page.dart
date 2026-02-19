@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/ads.dart';
 import '../../core/app.dart';
 import '../../core/app_lang.dart';
 
@@ -16,12 +17,10 @@ class ComparePage extends StatefulWidget {
 class _ComparePageState extends State<ComparePage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Loan A
   final _aAmountCtrl = TextEditingController(text: '10000');
   final _aRateCtrl = TextEditingController(text: '10');
   final _aTermCtrl = TextEditingController(text: '5');
 
-  // Loan B
   final _bAmountCtrl = TextEditingController(text: '10000');
   final _bRateCtrl = TextEditingController(text: '8');
   final _bTermCtrl = TextEditingController(text: '5');
@@ -44,9 +43,7 @@ class _ComparePageState extends State<ComparePage> {
 
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    final lang = FinovaApp.of(context).lang;
-    final isArabic = lang == AppLang.ar;
-
+    final isArabic = FinovaApp.of(context).lang == AppLang.ar;
     final saved = prefs.getBool('show_islamic_notice');
     setState(() {
       _showIslamicNotice = saved ?? isArabic;
@@ -75,12 +72,6 @@ class _ComparePageState extends State<ComparePage> {
 
   double _parseDouble(String s) => double.tryParse(s.trim().replaceAll(',', '')) ?? double.nan;
   int _parseInt(String s) => int.tryParse(s.trim()) ?? -1;
-
-  int _termMonths() {
-    final term = _parseInt(_aTermCtrl.text); // just to validate unit; actual term per loan uses same unit
-    if (term <= 0) return -1;
-    return _termIsYears ? term * 12 : term;
-  }
 
   int _termMonthsFrom(TextEditingController ctrl) {
     final term = _parseInt(ctrl.text);
@@ -112,11 +103,7 @@ class _ComparePageState extends State<ComparePage> {
     return null;
   }
 
-  _LoanCalc _calcLoan({
-    required double principal,
-    required double annualRate,
-    required int months,
-  }) {
+  _LoanCalc _calcLoan({required double principal, required double annualRate, required int months}) {
     final monthlyRate = annualRate / 12 / 100;
 
     double monthlyPayment;
@@ -140,7 +127,7 @@ class _ComparePageState extends State<ComparePage> {
     );
   }
 
-  void _compare() {
+  Future<void> _compare() async {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -157,8 +144,7 @@ class _ComparePageState extends State<ComparePage> {
     final a = _calcLoan(principal: aP, annualRate: aR, months: aN);
     final b = _calcLoan(principal: bP, annualRate: bR, months: bN);
 
-    // Decide "better" based on lower total interest first, then lower total payment
-    int winner; // 0 = tie, 1 = A, 2 = B
+    int winner;
     if ((a.totalInterest - b.totalInterest).abs() < 0.01 && (a.totalPayment - b.totalPayment).abs() < 0.01) {
       winner = 0;
     } else if (a.totalInterest < b.totalInterest - 0.01) {
@@ -166,13 +152,14 @@ class _ComparePageState extends State<ComparePage> {
     } else if (b.totalInterest < a.totalInterest - 0.01) {
       winner = 2;
     } else {
-      // if interest is similar, choose lower total payment
       winner = a.totalPayment <= b.totalPayment ? 1 : 2;
     }
 
     setState(() {
       _result = _CompareResult(a: a, b: b, winner: winner);
     });
+
+    await Ads.maybeShowInterstitial(context);
 
     if (_showIslamicNotice && _isArabic) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -436,6 +423,7 @@ class _ComparePageState extends State<ComparePage> {
           if (_result != null) _resultCard(_result!),
         ],
       ),
+      bottomNavigationBar: const AdBanner(),
     );
   }
 }
@@ -461,7 +449,7 @@ class _LoanCalc {
 class _CompareResult {
   final _LoanCalc a;
   final _LoanCalc b;
-  final int winner; // 0 tie, 1 A, 2 B
+  final int winner;
 
   const _CompareResult({required this.a, required this.b, required this.winner});
 }
