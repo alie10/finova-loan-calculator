@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import '../core/ads/ad_ids.dart';
+import '../core/ads/ad_service.dart';
 
 class AdBanner extends StatefulWidget {
   const AdBanner({super.key});
@@ -16,18 +16,20 @@ class _AdBannerState extends State<AdBanner> {
   @override
   void initState() {
     super.initState();
-    _ad = BannerAd(
-      size: AdSize.banner,
-      adUnitId: AdIds.bannerId(),
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (_) => setState(() => _loaded = true),
-        onAdFailedToLoad: (ad, _) {
-          ad.dispose();
-          setState(() => _loaded = false);
-        },
-      ),
-    )..load();
+    final ad = AdService.instance.createBannerAd(size: AdSize.banner);
+
+    ad.listener = BannerAdListener(
+      onAdLoaded: (ad) {
+        if (!mounted) return;
+        setState(() => _loaded = true);
+      },
+      onAdFailedToLoad: (ad, err) {
+        ad.dispose();
+      },
+    );
+
+    _ad = ad;
+    ad.load();
   }
 
   @override
@@ -38,14 +40,15 @@ class _AdBannerState extends State<AdBanner> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded || _ad == null) return const SizedBox(height: 0);
+    final ad = _ad;
+    if (!_loaded || ad == null) return const SizedBox.shrink();
 
     return SafeArea(
       top: false,
       child: SizedBox(
-        height: _ad!.size.height.toDouble(),
-        width: _ad!.size.width.toDouble(),
-        child: AdWidget(ad: _ad!),
+        height: ad.size.height.toDouble(),
+        width: ad.size.width.toDouble(),
+        child: AdWidget(ad: ad),
       ),
     );
   }
