@@ -1,5 +1,5 @@
 name: finova_loan_calculator
-description: Finova - Smart Finance Toolkit
+description: Finova - Loan Calculator
 publish_to: "none"
 
 version: 1.0.0+1
@@ -14,8 +14,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  shared_preferences: ^2.2.3
- intl: ^0.20.2
+  intl: ^0.20.2
+  shared_preferences: ^2.2.2
   fl_chart: ^0.68.0
 
   # AdMob
