@@ -107,24 +107,21 @@ class _LoanPageState extends State<LoanPage> {
 
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final principal = _parseDouble(_amountCtrl.text);
-    final annualRate = _parseDouble(_rateCtrl.text);
-    final n = _termMonths();
+    final double principal = _parseDouble(_amountCtrl.text);
+    final double annualRate = _parseDouble(_rateCtrl.text);
+    final int n = _termMonths();
 
     if (principal.isNaN || annualRate.isNaN || n <= 0) return;
 
-    final monthlyRate = annualRate / 12 / 100;
+    final double monthlyRate = annualRate / 12.0 / 100.0;
 
-    double monthlyPayment;
-    if (monthlyRate == 0) {
-      monthlyPayment = principal / n;
-    } else {
-      monthlyPayment =
-          (principal * monthlyRate * pow(1 + monthlyRate, n)) / (pow(1 + monthlyRate, n) - 1);
-    }
+    final double monthlyPayment = (monthlyRate == 0.0)
+        ? (principal / n.toDouble())
+        : (principal * monthlyRate * pow(1.0 + monthlyRate, n).toDouble()) /
+            (pow(1.0 + monthlyRate, n).toDouble() - 1.0);
 
-    final totalPayment = monthlyPayment * n;
-    final totalInterest = max(0, totalPayment - principal);
+    final double totalPayment = monthlyPayment * n.toDouble();
+    final double totalInterest = max(0.0, totalPayment - principal);
 
     setState(() {
       _result = _LoanResult(
@@ -137,7 +134,7 @@ class _LoanPageState extends State<LoanPage> {
       );
     });
 
-    // Show interstitial occasionally (frequency capped)
+    // Interstitial occasionally
     await Ads.maybeShowInterstitial(context);
 
     // Optional Islamic notice for Arabic
@@ -165,18 +162,18 @@ class _LoanPageState extends State<LoanPage> {
 
   List<_AmRow> _buildSchedule(_LoanResult r) {
     final rows = <_AmRow>[];
-    final monthlyRate = r.annualRate / 12 / 100;
+    final double monthlyRate = r.annualRate / 12.0 / 100.0;
 
     double balance = r.principal;
-    final payment = r.monthlyPayment;
+    final double payment = r.monthlyPayment;
 
     for (int i = 1; i <= r.months; i++) {
-      final interest = monthlyRate == 0 ? 0 : balance * monthlyRate;
+      final double interest = (monthlyRate == 0.0) ? 0.0 : (balance * monthlyRate);
       double principalPaid = payment - interest;
       if (principalPaid > balance) principalPaid = balance;
 
-      balance = (balance - principalPaid);
-      if (balance < 0) balance = 0;
+      balance = balance - principalPaid;
+      if (balance < 0.0) balance = 0.0;
 
       rows.add(_AmRow(
         month: i,
@@ -186,7 +183,7 @@ class _LoanPageState extends State<LoanPage> {
         balance: balance,
       ));
 
-      if (balance <= 0) break;
+      if (balance <= 0.0) break;
     }
     return rows;
   }
@@ -197,7 +194,7 @@ class _LoanPageState extends State<LoanPage> {
 
     final rows = _buildSchedule(r);
     final money = _moneyFormat();
-    final num = _numFormat();
+    final numFmt = _numFormat();
 
     showModalBottomSheet(
       context: context,
@@ -229,7 +226,7 @@ class _LoanPageState extends State<LoanPage> {
                       final row = rows[index];
                       return ListTile(
                         dense: true,
-                        title: Text(_t(en: 'Month', ar: 'شهر') + ' ${num.format(row.month)}'),
+                        title: Text(_t(en: 'Month', ar: 'شهر') + ' ${numFmt.format(row.month)}'),
                         subtitle: Text(
                           _t(en: 'Principal', ar: 'أصل') +
                               ': ${money.format(row.principal)}   •   ' +
@@ -363,19 +360,19 @@ class _LoanPageState extends State<LoanPage> {
   Widget _buildResultCard(_LoanResult r) {
     final money = _moneyFormat();
 
-    final principal = r.principal;
-    final interest = max(0, r.totalInterest);
-    final total = principal + interest;
+    final double principal = r.principal;
+    final double interest = max(0.0, r.totalInterest);
+    final double total = principal + interest;
 
     final sections = [
       PieChartSectionData(
-        value: principal <= 0 ? 0 : principal,
+        value: principal <= 0.0 ? 0.0 : principal,
         title: _t(en: 'Principal', ar: 'الأصل'),
         radius: 48,
         titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
       PieChartSectionData(
-        value: interest <= 0 ? 0 : interest,
+        value: interest <= 0.0 ? 0.0 : interest,
         title: _t(en: 'Interest', ar: 'الفائدة'),
         radius: 48,
         titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
