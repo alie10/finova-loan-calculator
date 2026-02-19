@@ -103,19 +103,20 @@ class _ComparePageState extends State<ComparePage> {
     return null;
   }
 
-  _LoanCalc _calcLoan({required double principal, required double annualRate, required int months}) {
-    final monthlyRate = annualRate / 12 / 100;
+  _LoanCalc _calcLoan({
+    required double principal,
+    required double annualRate,
+    required int months,
+  }) {
+    final double monthlyRate = annualRate / 12.0 / 100.0;
 
-    double monthlyPayment;
-    if (monthlyRate == 0) {
-      monthlyPayment = principal / months;
-    } else {
-      monthlyPayment =
-          (principal * monthlyRate * pow(1 + monthlyRate, months)) / (pow(1 + monthlyRate, months) - 1);
-    }
+    final double monthlyPayment = (monthlyRate == 0.0)
+        ? (principal / months.toDouble())
+        : (principal * monthlyRate * pow(1.0 + monthlyRate, months).toDouble()) /
+            (pow(1.0 + monthlyRate, months).toDouble() - 1.0);
 
-    final totalPayment = monthlyPayment * months;
-    final totalInterest = max(0, totalPayment - principal);
+    final double totalPayment = monthlyPayment * months.toDouble();
+    final double totalInterest = max(0.0, totalPayment - principal);
 
     return _LoanCalc(
       principal: principal,
@@ -131,19 +132,20 @@ class _ComparePageState extends State<ComparePage> {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final aP = _parseDouble(_aAmountCtrl.text);
-    final aR = _parseDouble(_aRateCtrl.text);
-    final aN = _termMonthsFrom(_aTermCtrl);
+    final double aP = _parseDouble(_aAmountCtrl.text);
+    final double aR = _parseDouble(_aRateCtrl.text);
+    final int aN = _termMonthsFrom(_aTermCtrl);
 
-    final bP = _parseDouble(_bAmountCtrl.text);
-    final bR = _parseDouble(_bRateCtrl.text);
-    final bN = _termMonthsFrom(_bTermCtrl);
+    final double bP = _parseDouble(_bAmountCtrl.text);
+    final double bR = _parseDouble(_bRateCtrl.text);
+    final int bN = _termMonthsFrom(_bTermCtrl);
 
     if (aP.isNaN || aR.isNaN || aN <= 0 || bP.isNaN || bR.isNaN || bN <= 0) return;
 
     final a = _calcLoan(principal: aP, annualRate: aR, months: aN);
     final b = _calcLoan(principal: bP, annualRate: bR, months: bN);
 
+    // winner by lower total interest, then lower total payment
     int winner;
     if ((a.totalInterest - b.totalInterest).abs() < 0.01 && (a.totalPayment - b.totalPayment).abs() < 0.01) {
       winner = 0;
@@ -242,21 +244,18 @@ class _ComparePageState extends State<ComparePage> {
   Widget _resultCard(_CompareResult r) {
     final money = _moneyFormat();
 
-    String winnerText;
-    if (r.winner == 0) {
-      winnerText = _t(en: 'Tie (very close)', ar: 'متقارب جدًا (تعادل)');
-    } else if (r.winner == 1) {
-      winnerText = _t(en: 'Loan A is better (lower cost)', ar: 'القرض A أفضل (تكلفة أقل)');
-    } else {
-      winnerText = _t(en: 'Loan B is better (lower cost)', ar: 'القرض B أفضل (تكلفة أقل)');
-    }
+    final String winnerText = (r.winner == 0)
+        ? _t(en: 'Tie (very close)', ar: 'متقارب جدًا (تعادل)')
+        : (r.winner == 1)
+            ? _t(en: 'Loan A is better (lower cost)', ar: 'القرض A أفضل (تكلفة أقل)')
+            : _t(en: 'Loan B is better (lower cost)', ar: 'القرض B أفضل (تكلفة أقل)');
 
-    final diffMonthly = (r.a.monthlyPayment - r.b.monthlyPayment);
-    final diffInterest = (r.a.totalInterest - r.b.totalInterest);
-    final diffTotal = (r.a.totalPayment - r.b.totalPayment);
+    final double diffMonthly = r.a.monthlyPayment - r.b.monthlyPayment;
+    final double diffInterest = r.a.totalInterest - r.b.totalInterest;
+    final double diffTotal = r.a.totalPayment - r.b.totalPayment;
 
     String fmtDiff(double v) {
-      final sign = v >= 0 ? '+' : '-';
+      final sign = v >= 0.0 ? '+' : '-';
       return '$sign${money.format(v.abs())}';
     }
 
@@ -392,9 +391,19 @@ class _ComparePageState extends State<ComparePage> {
             key: _formKey,
             child: Column(
               children: [
-                _loanCard(title: _t(en: 'Loan A', ar: 'القرض A'), amount: _aAmountCtrl, rate: _aRateCtrl, term: _aTermCtrl),
+                _loanCard(
+                  title: _t(en: 'Loan A', ar: 'القرض A'),
+                  amount: _aAmountCtrl,
+                  rate: _aRateCtrl,
+                  term: _aTermCtrl,
+                ),
                 const SizedBox(height: 12),
-                _loanCard(title: _t(en: 'Loan B', ar: 'القرض B'), amount: _bAmountCtrl, rate: _bRateCtrl, term: _bTermCtrl),
+                _loanCard(
+                  title: _t(en: 'Loan B', ar: 'القرض B'),
+                  amount: _bAmountCtrl,
+                  rate: _bRateCtrl,
+                  term: _bTermCtrl,
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -449,7 +458,7 @@ class _LoanCalc {
 class _CompareResult {
   final _LoanCalc a;
   final _LoanCalc b;
-  final int winner;
+  final int winner; // 0 tie, 1 A, 2 B
 
   const _CompareResult({required this.a, required this.b, required this.winner});
 }
