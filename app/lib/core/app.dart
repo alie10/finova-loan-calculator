@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'ads.dart';
 import 'app_lang.dart';
 import 'strings.dart';
 import '../features/loan/loan_page.dart';
@@ -32,6 +33,8 @@ class _FinovaAppState extends State<FinovaApp> {
   void initState() {
     super.initState();
     _lang.load();
+    // Init AdMob early
+    Ads.init();
   }
 
   @override
