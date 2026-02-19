@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app.dart';
 import '../../core/app_lang.dart';
@@ -25,7 +26,38 @@ class _LoanPageState extends State<LoanPage> {
   String _currency = 'USD';
   final List<String> _currencies = const ['USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED'];
 
+  bool _loadedPrefs = false;
+  bool _showIslamicNotice = true;
+
   _LoanResult? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lang = FinovaApp.of(context).lang;
+    final isArabic = lang == AppLang.ar;
+
+    final saved = prefs.getBool('show_islamic_notice');
+    setState(() {
+      // default: ON for Arabic, OFF for English (global-friendly)
+      _showIslamicNotice = saved ?? isArabic;
+      _loadedPrefs = true;
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If language changes while page is alive, reload preference default once
+    if (!_loadedPrefs) {
+      _loadPrefs();
+    }
+  }
 
   @override
   void dispose() {
@@ -36,12 +68,10 @@ class _LoanPageState extends State<LoanPage> {
   }
 
   bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
-
   String _t({required String en, required String ar}) => _isArabic ? ar : en;
 
   NumberFormat _moneyFormat() {
     final locale = _isArabic ? 'ar' : 'en';
-    // Use a compact currency symbol (USD/EUR...) to stay globally consistent
     return NumberFormat.currency(locale: locale, name: _currency, symbol: '$_currency ');
   }
 
@@ -51,7 +81,6 @@ class _LoanPageState extends State<LoanPage> {
   }
 
   double _parseDouble(String s) => double.tryParse(s.trim().replaceAll(',', '')) ?? double.nan;
-
   int _parseInt(String s) => int.tryParse(s.trim()) ?? -1;
 
   int _termMonths() {
@@ -78,7 +107,6 @@ class _LoanPageState extends State<LoanPage> {
   String? _validateTerm(String? v) {
     final x = _parseInt(v ?? '');
     if (x <= 0) return _t(en: 'Enter a valid term', ar: 'أدخل مدة صحيحة');
-    // Hard limit to keep schedules reasonable
     final months = _termIsYears ? x * 12 : x;
     if (months < 1) return _t(en: 'Term too short', ar: 'المدة قصيرة جدًا');
     if (months > 600) return _t(en: 'Max term is 600 months', ar: 'الحد الأقصى 600 شهر');
@@ -102,11 +130,12 @@ class _LoanPageState extends State<LoanPage> {
     if (monthlyRate == 0) {
       monthlyPayment = principal / n;
     } else {
-      monthlyPayment = (principal * monthlyRate * pow(1 + monthlyRate, n)) / (pow(1 + monthlyRate, n) - 1);
+      monthlyPayment = (principal * monthlyRate * pow(1 + monthlyRate, n)) /
+          (pow(1 + monthlyRate, n) - 1);
     }
 
     final totalPayment = monthlyPayment * n;
-    final totalInterest = totalPayment - principal;
+    final totalInterest = max(0, totalPayment - principal);
 
     setState(() {
       _result = _LoanResult(
@@ -115,9 +144,21 @@ class _LoanPageState extends State<LoanPage> {
         months: n,
         monthlyPayment: monthlyPayment,
         totalPayment: totalPayment,
-        totalInterest: totalInterest < 0 ? 0 : totalInterest,
+        totalInterest: totalInterest,
       );
     });
+
+    // Show Islamic notice immediately after calculating (non-blocking), if enabled.
+    if (_showIslamicNotice && _isArabic) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 4),
+          content: const Text(
+            'تنبيه: القروض ذات الفائدة تُعد غير جائزة شرعًا في كثير من الآراء. التطبيق أداة حساب فقط.',
+          ),
+        ),
+      );
+    }
   }
 
   void _reset() {
@@ -233,13 +274,6 @@ class _LoanPageState extends State<LoanPage> {
   }
 
   Widget _buildInputCard() {
-    final tAmount = _t(en: 'Loan Amount', ar: 'مبلغ القرض');
-    final tRate = _t(en: 'Interest Rate (%)', ar: 'نسبة الفائدة (%)');
-    final tTerm = _t(en: 'Term', ar: 'المدة');
-    final tYears = _t(en: 'Years', ar: 'سنوات');
-    final tMonths = _t(en: 'Months', ar: 'شهور');
-    final tCurrency = _t(en: 'Currency', ar: 'العملة');
-
     return Card(
       elevation: 0,
       child: Padding(
@@ -248,22 +282,14 @@ class _LoanPageState extends State<LoanPage> {
           key: _formKey,
           child: Column(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _currency,
-                      decoration: InputDecoration(
-                        labelText: tCurrency,
-                        border: const OutlineInputBorder(),
-                      ),
-                      items: _currencies
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _currency = v ?? 'USD'),
-                    ),
-                  ),
-                ],
+              DropdownButtonFormField<String>(
+                value: _currency,
+                decoration: InputDecoration(
+                  labelText: _t(en: 'Currency', ar: 'العملة'),
+                  border: const OutlineInputBorder(),
+                ),
+                items: _currencies.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                onChanged: (v) => setState(() => _currency = v ?? 'USD'),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -271,7 +297,7 @@ class _LoanPageState extends State<LoanPage> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: _validateAmount,
                 decoration: InputDecoration(
-                  labelText: tAmount,
+                  labelText: _t(en: 'Loan Amount', ar: 'مبلغ القرض'),
                   prefixIcon: const Icon(Icons.payments_outlined),
                   border: const OutlineInputBorder(),
                 ),
@@ -282,7 +308,7 @@ class _LoanPageState extends State<LoanPage> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: _validateRate,
                 decoration: InputDecoration(
-                  labelText: tRate,
+                  labelText: _t(en: 'Interest Rate (%)', ar: 'نسبة الفائدة (%)'),
                   prefixIcon: const Icon(Icons.percent),
                   border: const OutlineInputBorder(),
                 ),
@@ -296,7 +322,7 @@ class _LoanPageState extends State<LoanPage> {
                       keyboardType: TextInputType.number,
                       validator: _validateTerm,
                       decoration: InputDecoration(
-                        labelText: tTerm,
+                        labelText: _t(en: 'Term', ar: 'المدة'),
                         prefixIcon: const Icon(Icons.calendar_month_outlined),
                         border: const OutlineInputBorder(),
                       ),
@@ -305,15 +331,12 @@ class _LoanPageState extends State<LoanPage> {
                   const SizedBox(width: 12),
                   SegmentedButton<bool>(
                     segments: [
-                      ButtonSegment(value: true, label: Text(tYears)),
-                      ButtonSegment(value: false, label: Text(tMonths)),
+                      ButtonSegment(value: true, label: Text(_t(en: 'Years', ar: 'سنوات'))),
+                      ButtonSegment(value: false, label: Text(_t(en: 'Months', ar: 'شهور'))),
                     ],
                     selected: {_termIsYears},
                     onSelectionChanged: (s) {
-                      setState(() {
-                        _termIsYears = s.first;
-                      });
-                      // Re-validate term when unit changes
+                      setState(() => _termIsYears = s.first);
                       _formKey.currentState?.validate();
                     },
                   ),
@@ -336,6 +359,11 @@ class _LoanPageState extends State<LoanPage> {
                   ),
                 ],
               ),
+
+              if (_showIslamicNotice && _isArabic) ...[
+                const SizedBox(height: 12),
+                _IslamicInlineNotice(),
+              ],
             ],
           ),
         ),
@@ -345,10 +373,6 @@ class _LoanPageState extends State<LoanPage> {
 
   Widget _buildResultCard(_LoanResult r) {
     final money = _moneyFormat();
-
-    final tMonthly = _t(en: 'Monthly Payment', ar: 'القسط الشهري');
-    final tTotal = _t(en: 'Total Payment', ar: 'إجمالي السداد');
-    final tInterest = _t(en: 'Total Interest', ar: 'إجمالي الفائدة');
 
     final principal = r.principal;
     final interest = max(0, r.totalInterest);
@@ -379,7 +403,7 @@ class _LoanPageState extends State<LoanPage> {
               children: [
                 Expanded(
                   child: _MetricTile(
-                    label: tMonthly,
+                    label: _t(en: 'Monthly Payment', ar: 'القسط الشهري'),
                     value: money.format(r.monthlyPayment),
                     icon: Icons.calendar_view_month_outlined,
                   ),
@@ -387,7 +411,7 @@ class _LoanPageState extends State<LoanPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _MetricTile(
-                    label: tTotal,
+                    label: _t(en: 'Total Payment', ar: 'إجمالي السداد'),
                     value: money.format(r.totalPayment),
                     icon: Icons.account_balance_wallet_outlined,
                   ),
@@ -396,7 +420,7 @@ class _LoanPageState extends State<LoanPage> {
             ),
             const SizedBox(height: 12),
             _MetricTile(
-              label: tInterest,
+              label: _t(en: 'Total Interest', ar: 'إجمالي الفائدة'),
               value: money.format(r.totalInterest),
               icon: Icons.trending_up,
             ),
@@ -420,20 +444,11 @@ class _LoanPageState extends State<LoanPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _LegendRow(
-                          label: _t(en: 'Principal', ar: 'الأصل'),
-                          value: money.format(principal),
-                        ),
+                        _LegendRow(label: _t(en: 'Principal', ar: 'الأصل'), value: money.format(principal)),
                         const SizedBox(height: 8),
-                        _LegendRow(
-                          label: _t(en: 'Interest', ar: 'الفائدة'),
-                          value: money.format(interest),
-                        ),
+                        _LegendRow(label: _t(en: 'Interest', ar: 'الفائدة'), value: money.format(interest)),
                         const SizedBox(height: 8),
-                        _LegendRow(
-                          label: _t(en: 'Total', ar: 'الإجمالي'),
-                          value: money.format(total),
-                        ),
+                        _LegendRow(label: _t(en: 'Total', ar: 'الإجمالي'), value: money.format(total)),
                       ],
                     ),
                   ),
@@ -452,9 +467,9 @@ class _LoanPageState extends State<LoanPage> {
                 ),
               ],
             ),
-            if (_isArabic) ...[
+            if (_showIslamicNotice && _isArabic) ...[
               const SizedBox(height: 10),
-              _IslamicNoticeCard(),
+              _IslamicResultDisclaimer(),
             ],
           ],
         ),
@@ -464,18 +479,13 @@ class _LoanPageState extends State<LoanPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tTitle = _t(en: 'Loan Calculator', ar: 'حاسبة القرض');
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(tTitle),
+        title: Text(_t(en: 'Loan Calculator', ar: 'حاسبة القرض')),
         actions: [
           IconButton(
             tooltip: _t(en: 'Language', ar: 'اللغة'),
-            onPressed: () {
-              // Quick toggle language from this page
-              FinovaApp.of(context).toggle();
-            },
+            onPressed: () => FinovaApp.of(context).toggle(),
             icon: const Icon(Icons.language),
           ),
         ],
@@ -597,27 +607,36 @@ class _LegendRow extends StatelessWidget {
   }
 }
 
-class _IslamicNoticeCard extends StatelessWidget {
+class _IslamicInlineNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.info_outline),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'تنبيه: في كثير من الآراء الفقهية تُعد القروض ذات الفائدة غير جائزة شرعًا. '
-                'الأفضل تجنّبها واستشارة جهة دينية مختصة عند الحاجة.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ],
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          'تنبيه شرعي: القروض ذات الفائدة تُعد غير جائزة في كثير من الآراء الفقهية. '
+          'هذا التطبيق آلة حساب فقط ولا يشجّع على الاقتراض.',
+          style: TextStyle(fontSize: 12),
+        ),
+      ),
+    );
+  }
+}
+
+class _IslamicResultDisclaimer extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          'تنبيه: النتائج تقديرية لأغراض الحساب فقط. التطبيق لا يقدم نصيحة مالية ولا ينصح بأخذ قروض. '
+          'شرعًا: القروض ذات الفائدة غير جائزة في كثير من الآراء، فالأفضل تجنّبها واستشارة أهل العلم.',
+          style: TextStyle(fontSize: 12),
         ),
       ),
     );
