@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../../core/ads.dart';
 import '../../core/app.dart';
 import '../../core/app_lang.dart';
 
@@ -38,6 +40,7 @@ class _SavingsPageState extends State<SavingsPage> {
   String? _validatePositive(String? v) {
     final x = _parseDouble(v ?? '');
     if (x.isNaN || x < 0) return _t(en: 'Enter valid number', ar: 'أدخل رقم صحيح');
+    if (x > 1000000000) return _t(en: 'Too large', ar: 'رقم كبير جدًا');
     return null;
   }
 
@@ -48,7 +51,7 @@ class _SavingsPageState extends State<SavingsPage> {
     return null;
   }
 
-  void _calculate() {
+  Future<void> _calculate() async {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -76,6 +79,8 @@ class _SavingsPageState extends State<SavingsPage> {
         totalInterest: totalInterest,
       );
     });
+
+    await Ads.maybeShowInterstitial(context);
   }
 
   void _reset() {
@@ -87,6 +92,15 @@ class _SavingsPageState extends State<SavingsPage> {
       _currency = 'USD';
       _result = null;
     });
+  }
+
+  @override
+  void dispose() {
+    _initialCtrl.dispose();
+    _monthlyCtrl.dispose();
+    _rateCtrl.dispose();
+    _yearsCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -120,9 +134,7 @@ class _SavingsPageState extends State<SavingsPage> {
                         labelText: _t(en: 'Currency', ar: 'العملة'),
                         border: const OutlineInputBorder(),
                       ),
-                      items: _currencies
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                          .toList(),
+                      items: _currencies.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (v) => setState(() => _currency = v ?? 'USD'),
                     ),
                     const SizedBox(height: 12),
@@ -206,6 +218,7 @@ class _SavingsPageState extends State<SavingsPage> {
           ]
         ],
       ),
+      bottomNavigationBar: const AdBanner(),
     );
   }
 }
