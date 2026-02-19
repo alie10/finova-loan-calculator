@@ -1,15 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:label="Finova"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- AdMob App ID (TEST). Replace later with your real App ID -->
+        <!-- ✅ AdMob App ID (PRODUCTION) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-1243924347643904~8738724931"/>
+            android:value="ca-app-pub-1243924347643904~7361661991" />
 
         <activity
             android:name=".MainActivity"
@@ -25,8 +27,8 @@
                 android:resource="@style/NormalTheme" />
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -34,4 +36,5 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+
 </manifest>
