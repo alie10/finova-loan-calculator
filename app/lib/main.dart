@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'core/app.dart';
 
-void main() {
-  runApp(const FinovaApp());
+import 'package:flutter/material.dart';
+import 'core/ads/ad_service.dart';
+// باقي imports…
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AdService.instance.initialize(); // ✅
+  runApp(const MyApp());
 }
