@@ -6,69 +6,97 @@ class AdService {
   AdService._();
   static final AdService instance = AdService._();
 
-  InterstitialAd? _interstitial;
-  bool _isLoading = false;
+  bool _initialized = false;
 
-  // تحكم في الإزعاج: إعلان بيني كل كام عملية "حساب"؟
-  int _actionCount = 0;
-  final int showEvery = 3; // مثال: كل 3 مرات Calculate
+  InterstitialAd? _interstitial;
+  bool _loadingInterstitial = false;
+
+  // منع إزعاج المستخدم: أقل مدة بين الإعلانات البينية
+  DateTime? _lastInterstitialShownAt;
+  static const Duration _minGapBetweenInterstitial = Duration(minutes: 2);
 
   Future<void> initialize() async {
+    if (_initialized) return;
     await MobileAds.instance.initialize();
-    await preloadInterstitial();
+    _initialized = true;
+
+    // حضّر إعلان بيني من بدري
+    _loadInterstitial();
   }
 
-  Future<void> preloadInterstitial() async {
-    if (_isLoading) return;
-    _isLoading = true;
-
-    await InterstitialAd.load(
-      adUnitId: AdIds.interstitialId(),
+  /// Banner Ad factory
+  BannerAd createBannerAd({
+    AdSize size = AdSize.banner,
+  }) {
+    return BannerAd(
+      adUnitId: AdIds.banner,
+      size: size,
       request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _interstitial = ad;
-          _isLoading = false;
-
-          _interstitial?.setImmersiveMode(true);
-          _interstitial?.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              _interstitial = null;
-              // حضّر اللي بعده
-              unawaited(preloadInterstitial());
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              ad.dispose();
-              _interstitial = null;
-              unawaited(preloadInterstitial());
-            },
-          );
-        },
-        onAdFailedToLoad: (error) {
-          _interstitial = null;
-          _isLoading = false;
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {},
+        onAdFailedToLoad: (ad, err) {
+          ad.dispose();
         },
       ),
     );
   }
 
-  /// استدعِ دي بعد ما المستخدم يضغط Calculate
-  /// عشان الإعلان يظهر "بعد" النتيجة، مش قبلها.
-  Future<void> maybeShowInterstitial() async {
-    _actionCount++;
+  void _loadInterstitial() {
+    if (_loadingInterstitial) return;
+    _loadingInterstitial = true;
 
-    // تقليل الإزعاج: ما نعرضش كل مرة
-    if (_actionCount % showEvery != 0) return;
+    InterstitialAd.load(
+      adUnitId: AdIds.interstitial,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) {
+          _interstitial = ad;
+          _loadingInterstitial = false;
+
+          ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdDismissedFullScreenContent: (ad) {
+              ad.dispose();
+              _interstitial = null;
+              _loadInterstitial();
+            },
+            onAdFailedToShowFullScreenContent: (ad, err) {
+              ad.dispose();
+              _interstitial = null;
+              _loadInterstitial();
+            },
+          );
+        },
+        onAdFailedToLoad: (err) {
+          _loadingInterstitial = false;
+
+          // إعادة محاولة بعد شوية
+          Timer(const Duration(seconds: 20), () {
+            _loadInterstitial();
+          });
+        },
+      ),
+    );
+  }
+
+  /// عرض إعلان بيني "بهدوء" (بدون إزعاج): لو لسه ما جهّزش أو الوقت قريب، مش هيعرض
+  Future<bool> showInterstitialIfAllowed() async {
+    if (!_initialized) return false;
+
+    // لو اتعرض قريب، بلاش
+    final last = _lastInterstitialShownAt;
+    if (last != null && DateTime.now().difference(last) < _minGapBetweenInterstitial) {
+      return false;
+    }
 
     final ad = _interstitial;
     if (ad == null) {
-      // لو مش جاهز، حضّره
-      unawaited(preloadInterstitial());
-      return;
+      _loadInterstitial();
+      return false;
     }
 
+    _lastInterstitialShownAt = DateTime.now();
     await ad.show();
-    // بعد show الـ callbacks هتتولى إعادة التحميل
+    _interstitial = null;
+    return true;
   }
 }
