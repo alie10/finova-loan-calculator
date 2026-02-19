@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/ads.dart';
 import '../../core/app.dart';
 import '../../core/app_lang.dart';
 
@@ -39,24 +40,12 @@ class _LoanPageState extends State<LoanPage> {
 
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    final lang = FinovaApp.of(context).lang;
-    final isArabic = lang == AppLang.ar;
-
+    final isArabic = FinovaApp.of(context).lang == AppLang.ar;
     final saved = prefs.getBool('show_islamic_notice');
     setState(() {
-      // default: ON for Arabic, OFF for English (global-friendly)
       _showIslamicNotice = saved ?? isArabic;
       _loadedPrefs = true;
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // If language changes while page is alive, reload preference default once
-    if (!_loadedPrefs) {
-      _loadPrefs();
-    }
   }
 
   @override
@@ -113,7 +102,7 @@ class _LoanPageState extends State<LoanPage> {
     return null;
   }
 
-  void _calculate() {
+  Future<void> _calculate() async {
     FocusScope.of(context).unfocus();
 
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -130,8 +119,8 @@ class _LoanPageState extends State<LoanPage> {
     if (monthlyRate == 0) {
       monthlyPayment = principal / n;
     } else {
-      monthlyPayment = (principal * monthlyRate * pow(1 + monthlyRate, n)) /
-          (pow(1 + monthlyRate, n) - 1);
+      monthlyPayment =
+          (principal * monthlyRate * pow(1 + monthlyRate, n)) / (pow(1 + monthlyRate, n) - 1);
     }
 
     final totalPayment = monthlyPayment * n;
@@ -148,14 +137,15 @@ class _LoanPageState extends State<LoanPage> {
       );
     });
 
-    // Show Islamic notice immediately after calculating (non-blocking), if enabled.
+    // Show interstitial occasionally (frequency capped)
+    await Ads.maybeShowInterstitial(context);
+
+    // Optional Islamic notice for Arabic
     if (_showIslamicNotice && _isArabic) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 4),
-          content: const Text(
-            'تنبيه: القروض ذات الفائدة تُعد غير جائزة شرعًا في كثير من الآراء. التطبيق أداة حساب فقط.',
-          ),
+        const SnackBar(
+          duration: Duration(seconds: 4),
+          content: Text('تنبيه: التطبيق آلة حساب فقط. القروض ذات الفائدة غير جائزة في كثير من الآراء.'),
         ),
       );
     }
@@ -359,10 +349,9 @@ class _LoanPageState extends State<LoanPage> {
                   ),
                 ],
               ),
-
               if (_showIslamicNotice && _isArabic) ...[
                 const SizedBox(height: 12),
-                _IslamicInlineNotice(),
+                const _IslamicInlineNotice(),
               ],
             ],
           ),
@@ -469,7 +458,7 @@ class _LoanPageState extends State<LoanPage> {
             ),
             if (_showIslamicNotice && _isArabic) ...[
               const SizedBox(height: 10),
-              _IslamicResultDisclaimer(),
+              const _IslamicResultDisclaimer(),
             ],
           ],
         ),
@@ -479,6 +468,10 @@ class _LoanPageState extends State<LoanPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_loadedPrefs) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_t(en: 'Loan Calculator', ar: 'حاسبة القرض')),
@@ -509,6 +502,7 @@ class _LoanPageState extends State<LoanPage> {
             ),
         ],
       ),
+      bottomNavigationBar: const AdBanner(),
     );
   }
 }
@@ -608,6 +602,8 @@ class _LegendRow extends StatelessWidget {
 }
 
 class _IslamicInlineNotice extends StatelessWidget {
+  const _IslamicInlineNotice();
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -626,6 +622,8 @@ class _IslamicInlineNotice extends StatelessWidget {
 }
 
 class _IslamicResultDisclaimer extends StatelessWidget {
+  const _IslamicResultDisclaimer();
+
   @override
   Widget build(BuildContext context) {
     return Card(
