@@ -10,9 +10,11 @@ import '../features/compare/compare_page.dart';
 import '../features/savings/savings_page.dart';
 import '../features/settings/settings_page.dart';
 
+// Banner widget
+import '../widgets/ad_banner.dart';
+
 const String _kPrefLangCode = 'finova_lang_code';
 
-/// Controller exposed via FinovaApp.of(context)
 class FinovaController {
   FinovaController(this._getLang, this._toggle, this._setLang);
 
@@ -21,20 +23,16 @@ class FinovaController {
   final Future<void> Function(AppLang lang) _setLang;
 
   AppLang get lang => _getLang();
-
   Future<void> toggle() => _toggle();
-
   Future<void> setLang(AppLang lang) => _setLang(lang);
 }
 
 class FinovaApp extends StatefulWidget {
   const FinovaApp({super.key});
 
-  /// Pages already call FinovaApp.of(context)
   static FinovaController of(BuildContext context) {
     final state = context.findAncestorStateOfType<_FinovaAppState>();
     if (state == null) {
-      // Fallback safe controller (won't crash)
       return FinovaController(
         () => AppLang.ar,
         () async {},
@@ -144,7 +142,6 @@ class _FinovaAppState extends State<FinovaApp> {
   }
 }
 
-/// Home with tabs (Loan / Compare / Savings / Settings)
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -194,19 +191,26 @@ class _HomePageState extends State<HomePage> {
             children: pages,
           ),
         ),
-        bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
-            color: Colors.white,
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _index,
-            onTap: (v) => setState(() => _index = v),
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: const Color(0xFF3B82F6),
-            unselectedItemColor: const Color(0xFF6B7280),
-            items: items,
-          ),
+        // ✅ Tabs + Banner تحتهم (مضمون الظهور)
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+                color: Colors.white,
+              ),
+              child: BottomNavigationBar(
+                currentIndex: _index,
+                onTap: (v) => setState(() => _index = v),
+                type: BottomNavigationBarType.fixed,
+                selectedItemColor: const Color(0xFF3B82F6),
+                unselectedItemColor: const Color(0xFF6B7280),
+                items: items,
+              ),
+            ),
+            const AdBanner(),
+          ],
         ),
       ),
     );
