@@ -10,16 +10,40 @@ import '../features/settings/settings_page.dart';
 
 const String _kPrefLangCode = 'finova_lang_code';
 
-/// Call this from anywhere to change app locale.
-Future<void> setAppLocale(BuildContext context, Locale locale) async {
-  final state = context.findAncestorStateOfType<_FinovaAppState>();
-  if (state == null) return;
+/// App language enum (kept for compatibility with existing pages).
+enum AppLang { ar, en }
 
-  await state.setLocale(locale);
+/// Controller exposed via FinovaApp.of(context)
+class FinovaController {
+  FinovaController(this._getLang, this._toggle, this._setLang);
+
+  final AppLang Function() _getLang;
+  final Future<void> Function() _toggle;
+  final Future<void> Function(AppLang lang) _setLang;
+
+  AppLang get lang => _getLang();
+
+  Future<void> toggle() => _toggle();
+
+  Future<void> setLang(AppLang lang) => _setLang(lang);
 }
 
 class FinovaApp extends StatefulWidget {
   const FinovaApp({super.key});
+
+  /// Compatibility: existing pages call FinovaApp.of(context)
+  static FinovaController of(BuildContext context) {
+    final state = context.findAncestorStateOfType<_FinovaAppState>();
+    if (state == null) {
+      // Fallback safe controller (won't crash)
+      return FinovaController(
+        () => AppLang.ar,
+        () async {},
+        (_) async {},
+      );
+    }
+    return state.controller;
+  }
 
   @override
   State<FinovaApp> createState() => _FinovaAppState();
@@ -27,6 +51,12 @@ class FinovaApp extends StatefulWidget {
 
 class _FinovaAppState extends State<FinovaApp> {
   Locale _locale = const Locale('ar');
+
+  late final FinovaController controller = FinovaController(
+    () => _locale.languageCode == 'ar' ? AppLang.ar : AppLang.en,
+    _toggleLang,
+    _setLang,
+  );
 
   @override
   void initState() {
@@ -40,10 +70,19 @@ class _FinovaAppState extends State<FinovaApp> {
     setState(() => _locale = Locale(code));
   }
 
-  Future<void> setLocale(Locale locale) async {
+  Future<void> _setLocale(Locale locale) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kPrefLangCode, locale.languageCode);
     setState(() => _locale = locale);
+  }
+
+  Future<void> _setLang(AppLang lang) async {
+    await _setLocale(Locale(lang == AppLang.ar ? 'ar' : 'en'));
+  }
+
+  Future<void> _toggleLang() async {
+    final next = _locale.languageCode == 'ar' ? const Locale('en') : const Locale('ar');
+    await _setLocale(next);
   }
 
   @override
@@ -95,10 +134,7 @@ class _FinovaAppState extends State<FinovaApp> {
       title: 'Finova',
       theme: theme,
       locale: _locale,
-      supportedLocales: const [
-        Locale('ar'),
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -122,8 +158,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = Localizations.localeOf(context).languageCode;
-    final isAr = lang == 'ar';
+    final isArabic = FinovaApp.of(context).lang == AppLang.ar;
 
     final pages = const [
       LoanPage(),
@@ -135,24 +170,24 @@ class _HomePageState extends State<HomePage> {
     final items = <BottomNavigationBarItem>[
       BottomNavigationBarItem(
         icon: const Icon(Icons.calculate_outlined),
-        label: isAr ? 'القرض' : 'Loan',
+        label: isArabic ? 'القرض' : 'Loan',
       ),
       BottomNavigationBarItem(
         icon: const Icon(Icons.compare_arrows_outlined),
-        label: isAr ? 'المقارنة' : 'Compare',
+        label: isArabic ? 'المقارنة' : 'Compare',
       ),
       BottomNavigationBarItem(
         icon: const Icon(Icons.savings_outlined),
-        label: isAr ? 'الادخار' : 'Savings',
+        label: isArabic ? 'الادخار' : 'Savings',
       ),
       BottomNavigationBarItem(
         icon: const Icon(Icons.settings_outlined),
-        label: isAr ? 'الإعدادات' : 'Settings',
+        label: isArabic ? 'الإعدادات' : 'Settings',
       ),
     ];
 
     return Directionality(
-      textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         body: SafeArea(
           child: IndexedStack(
