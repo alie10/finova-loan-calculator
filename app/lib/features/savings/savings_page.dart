@@ -1,10 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
-import '../../core/ads.dart';
-import '../../core/app.dart';
-import '../../core/app_lang.dart';
+import '../../core/ads/ad_service.dart';
+import '../../core/app.dart'; // يحتوي FinovaApp + AppLang
 
 class SavingsPage extends StatefulWidget {
   const SavingsPage({super.key});
@@ -14,240 +12,333 @@ class SavingsPage extends StatefulWidget {
 }
 
 class _SavingsPageState extends State<SavingsPage> {
-  final _formKey = GlobalKey<FormState>();
-
-  final _initialCtrl = TextEditingController(text: '1000');
-  final _monthlyCtrl = TextEditingController(text: '200');
-  final _rateCtrl = TextEditingController(text: '5');
+  final _monthlyCtrl = TextEditingController(text: '1000');
+  final _rateCtrl = TextEditingController(text: '10');
   final _yearsCtrl = TextEditingController(text: '5');
 
   String _currency = 'USD';
-  final List<String> _currencies = const ['USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED'];
+  final List<String> _currencies = const ['USD', 'EGP', 'SAR', 'AED', 'EUR'];
 
   _SavingsResult? _result;
 
   bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
-  String _t({required String en, required String ar}) => _isArabic ? ar : en;
-
-  NumberFormat _moneyFormat() {
-    final locale = _isArabic ? 'ar' : 'en';
-    return NumberFormat.currency(locale: locale, name: _currency, symbol: '$_currency ');
-  }
-
-  double _parseDouble(String s) => double.tryParse(s.trim()) ?? double.nan;
-  int _parseInt(String s) => int.tryParse(s.trim()) ?? -1;
-
-  String? _validatePositive(String? v) {
-    final x = _parseDouble(v ?? '');
-    if (x.isNaN || x < 0) return _t(en: 'Enter valid number', ar: 'أدخل رقم صحيح');
-    if (x > 1000000000) return _t(en: 'Too large', ar: 'رقم كبير جدًا');
-    return null;
-  }
-
-  String? _validateYears(String? v) {
-    final x = _parseInt(v ?? '');
-    if (x <= 0) return _t(en: 'Enter valid years', ar: 'أدخل عدد سنوات صحيح');
-    if (x > 100) return _t(en: 'Too large', ar: 'عدد كبير جدًا');
-    return null;
-  }
-
-  Future<void> _calculate() async {
-    FocusScope.of(context).unfocus();
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    final initial = _parseDouble(_initialCtrl.text);
-    final monthly = _parseDouble(_monthlyCtrl.text);
-    final annualRate = _parseDouble(_rateCtrl.text);
-    final years = _parseInt(_yearsCtrl.text);
-
-    final months = years * 12;
-    final monthlyRate = annualRate / 12 / 100;
-
-    double futureValue = initial * pow(1 + monthlyRate, months);
-
-    for (int i = 0; i < months; i++) {
-      futureValue += monthly * pow(1 + monthlyRate, months - i);
-    }
-
-    final totalInvested = initial + monthly * months;
-    final totalInterest = futureValue - totalInvested;
-
-    setState(() {
-      _result = _SavingsResult(
-        futureValue: futureValue,
-        totalInvested: totalInvested,
-        totalInterest: totalInterest,
-      );
-    });
-
-    await Ads.maybeShowInterstitial(context);
-  }
-
-  void _reset() {
-    setState(() {
-      _initialCtrl.text = '1000';
-      _monthlyCtrl.text = '200';
-      _rateCtrl.text = '5';
-      _yearsCtrl.text = '5';
-      _currency = 'USD';
-      _result = null;
-    });
-  }
+  String t(String ar, String en) => _isArabic ? ar : en;
 
   @override
   void dispose() {
-    _initialCtrl.dispose();
     _monthlyCtrl.dispose();
     _rateCtrl.dispose();
     _yearsCtrl.dispose();
     super.dispose();
   }
 
+  double _parseDouble(String s) => double.tryParse(s.trim().replaceAll(',', '')) ?? 0.0;
+  int _parseInt(String s) => int.tryParse(s.trim()) ?? 0;
+
+  String _fmt(double v) => v.toStringAsFixed(2);
+
+  void _reset() {
+    setState(() {
+      _monthlyCtrl.text = '1000';
+      _rateCtrl.text = '10';
+      _yearsCtrl.text = '5';
+      _currency = 'USD';
+      _result = null;
+    });
+  }
+
+  // حساب قيمة الادخار المستقبلية (استثمار بمساهمة شهرية)
+  // نفترض فائدة سنوية مركبة شهرياً
+  void _calculate() async {
+    final monthly = _parseDouble(_monthlyCtrl.text);
+    final annualRate = _parseDouble(_rateCtrl.text);
+    final years = _parseInt(_yearsCtrl.text);
+
+    if (monthly <= 0 || years <= 0 || annualRate < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t('من فضلك أدخل أرقام صحيحة.', 'Please enter valid numbers.'))),
+      );
+      return;
+    }
+
+    final months = years * 12;
+    final r = (annualRate / 100.0) / 12.0;
+
+    double futureValue;
+    if (r <= 0) {
+      futureValue = monthly * months;
+    } else {
+      // FV of annuity: P * (( (1+r)^n - 1 ) / r)
+      final powVal = pow(1 + r, months).toDouble();
+      futureValue = monthly * ((powVal - 1) / r);
+    }
+
+    final totalContrib = monthly * months;
+    final gain = futureValue - totalContrib;
+
+    setState(() {
+      _result = _SavingsResult(
+        monthly: monthly,
+        years: years,
+        months: months,
+        annualRate: annualRate,
+        totalContrib: totalContrib,
+        futureValue: futureValue,
+        gain: gain,
+      );
+    });
+
+    // ✅ عرض Interstitial بذكاء بعد الحساب
+    await AdService.instance.maybeShowInterstitial();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final money = _moneyFormat();
+    final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_t(en: 'Savings Calculator', ar: 'حاسبة الادخار')),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.language),
-            onPressed: () => FinovaApp.of(context).toggle(),
-          )
-        ],
-      ),
-      body: ListView(
+    return Directionality(
+      textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: Padding(
         padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            elevation: 0,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: _currency,
-                      decoration: InputDecoration(
-                        labelText: _t(en: 'Currency', ar: 'العملة'),
-                        border: const OutlineInputBorder(),
-                      ),
-                      items: _currencies.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (v) => setState(() => _currency = v ?? 'USD'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _initialCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: _validatePositive,
-                      decoration: InputDecoration(
-                        labelText: _t(en: 'Initial Amount', ar: 'المبلغ المبدئي'),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _monthlyCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: _validatePositive,
-                      decoration: InputDecoration(
-                        labelText: _t(en: 'Monthly Deposit', ar: 'الإيداع الشهري'),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _rateCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: _validatePositive,
-                      decoration: InputDecoration(
-                        labelText: _t(en: 'Annual Interest (%)', ar: 'الفائدة السنوية (%)'),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _yearsCtrl,
-                      keyboardType: TextInputType.number,
-                      validator: _validateYears,
-                      decoration: InputDecoration(
-                        labelText: _t(en: 'Years', ar: 'عدد السنوات'),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: _calculate,
-                            child: Text(_t(en: 'Calculate', ar: 'احسب')),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton(
-                          onPressed: _reset,
-                          child: Text(_t(en: 'Reset', ar: 'إعادة')),
-                        ),
-                      ],
-                    )
-                  ],
+        child: ListView(
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.savings_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    t('الادخار', 'Savings'),
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // العملة
+            _Card(
+              title: t('العملة', 'Currency'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _currency,
+                  items: _currencies.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _currency = v);
+                  },
                 ),
               ),
             ),
-          ),
-          if (_result != null) ...[
             const SizedBox(height: 12),
-            Card(
-              elevation: 0,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _Metric(label: _t(en: 'Future Value', ar: 'القيمة المستقبلية'), value: money.format(_result!.futureValue)),
-                    const SizedBox(height: 10),
-                    _Metric(label: _t(en: 'Total Invested', ar: 'إجمالي المبلغ المدفوع'), value: money.format(_result!.totalInvested)),
-                    const SizedBox(height: 10),
-                    _Metric(label: _t(en: 'Total Interest', ar: 'إجمالي الأرباح'), value: money.format(_result!.totalInterest)),
-                  ],
+
+            _Card(
+              title: t('المبلغ الشهري', 'Monthly Amount'),
+              suffixIcon: const Icon(Icons.payments_outlined),
+              child: TextField(
+                controller: _monthlyCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: t('مثال: 1000', 'e.g. 1000'),
+                  border: InputBorder.none,
                 ),
               ),
-            )
-          ]
+            ),
+            const SizedBox(height: 10),
+
+            _Card(
+              title: t('العائد السنوي (%)', 'Annual Return (%)'),
+              suffixIcon: const Icon(Icons.percent),
+              child: TextField(
+                controller: _rateCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: t('مثال: 10', 'e.g. 10'),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            _Card(
+              title: t('المدة (سنوات)', 'Term (Years)'),
+              suffixIcon: const Icon(Icons.calendar_month_outlined),
+              child: TextField(
+                controller: _yearsCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: t('مثال: 5', 'e.g. 5'),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _reset,
+                    child: Text(t('إعادة', 'Reset')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _calculate,
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: Text(t('احسب', 'Calculate')),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 18),
+
+            if (_result != null) ...[
+              _ResultsCard(
+                currency: _currency,
+                isArabic: _isArabic,
+                r: _result!,
+                fmt: _fmt,
+              ),
+              const SizedBox(height: 24),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Widget? suffixIcon;
+
+  const _Card({
+    required this.title,
+    required this.child,
+    this.suffixIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (suffixIcon != null) ...[
+                const SizedBox(width: 8),
+                suffixIcon!,
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          child,
         ],
       ),
-      bottomNavigationBar: const AdBanner(),
+    );
+  }
+}
+
+class _ResultsCard extends StatelessWidget {
+  final String currency;
+  final bool isArabic;
+  final _SavingsResult r;
+  final String Function(double v) fmt;
+
+  const _ResultsCard({
+    required this.currency,
+    required this.isArabic,
+    required this.r,
+    required this.fmt,
+  });
+
+  String t(String ar, String en) => isArabic ? ar : en;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Widget row(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(label, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 12),
+            Text(value, style: theme.textTheme.bodyMedium),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(t('نتائج الادخار', 'Savings Results'),
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 10),
+          row(t('إجمالي المساهمات', 'Total Contributions'), '${fmt(r.totalContrib)} $currency'),
+          row(t('القيمة المستقبلية', 'Future Value'), '${fmt(r.futureValue)} $currency'),
+          row(t('الربح/الزيادة', 'Gain'), '${fmt(r.gain)} $currency'),
+          const SizedBox(height: 6),
+          Text(
+            t(
+              'ملاحظة: هذه حسابات تقديرية وقد تختلف النتائج حسب طريقة الفائدة/الاستثمار.',
+              'Note: These are estimates and results may vary depending on investment/interest method.',
+            ),
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _SavingsResult {
+  final double monthly;
+  final int years;
+  final int months;
+  final double annualRate;
+  final double totalContrib;
   final double futureValue;
-  final double totalInvested;
-  final double totalInterest;
+  final double gain;
 
-  const _SavingsResult({
+  _SavingsResult({
+    required this.monthly,
+    required this.years,
+    required this.months,
+    required this.annualRate,
+    required this.totalContrib,
     required this.futureValue,
-    required this.totalInvested,
-    required this.totalInterest,
+    required this.gain,
   });
-}
-
-class _Metric extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _Metric({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Text(label)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
 }
