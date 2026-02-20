@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../core/app.dart'; // فيه setAppLocale()
+
+import '../../core/app.dart';
+import '../../core/app_lang.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -9,20 +11,13 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool _isArabic = true;
+  bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final code = Localizations.localeOf(context).languageCode;
-    setState(() {
-      _isArabic = code == 'ar';
-    });
-  }
+  String _t({required String ar, required String en}) => _isArabic ? ar : en;
 
-  Future<void> _setLanguage(bool arabic) async {
-    setState(() => _isArabic = arabic);
-    await setAppLocale(context, arabic ? const Locale('ar') : const Locale('en'));
+  Future<void> _setLanguage(AppLang lang) async {
+    await FinovaApp.of(context).setLang(lang);
+    setState(() {});
   }
 
   @override
@@ -33,7 +28,17 @@ class _SettingsPageState extends State<SettingsPage> {
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(isAr ? 'الإعدادات' : 'Settings'),
+          title: Text(_t(ar: 'الإعدادات', en: 'Settings')),
+          actions: [
+            IconButton(
+              tooltip: _t(ar: 'تبديل اللغة', en: 'Toggle language'),
+              onPressed: () async {
+                await FinovaApp.of(context).toggle();
+                setState(() {});
+              },
+              icon: const Icon(Icons.language),
+            ),
+          ],
         ),
         body: ListView(
           padding: const EdgeInsets.all(16),
@@ -45,8 +50,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isAr ? 'اللغة' : 'Language',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      _t(ar: 'اللغة', en: 'Language'),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -55,7 +60,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           child: _LangTile(
                             title: 'العربية',
                             selected: isAr,
-                            onTap: () => _setLanguage(true),
+                            onTap: () => _setLanguage(AppLang.ar),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -63,7 +68,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           child: _LangTile(
                             title: 'English',
                             selected: !isAr,
-                            onTap: () => _setLanguage(false),
+                            onTap: () => _setLanguage(AppLang.en),
                           ),
                         ),
                       ],
@@ -72,9 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 12),
-
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -82,39 +85,17 @@ class _SettingsPageState extends State<SettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isAr ? 'تنبيه شرعي' : 'Sharia Notice',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      _t(ar: 'تنبيه شرعي', en: 'Sharia Notice'),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      isAr
-                          ? 'تنبيه: القروض الربوية محرّمة في الشريعة الإسلامية. هذا التطبيق أداة حسابية فقط لعرض التكلفة/الفائدة ولا يُعد نصيحة بالاقتراض.'
-                          : 'Notice: Interest-based loans are prohibited in Islamic Sharia. This app is a calculator only to show costs/interest and is not a recommendation to take loans.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isAr ? 'عن التطبيق' : 'About',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      isAr
-                          ? 'Finova - Loan Calculator'
-                          : 'Finova - Loan Calculator',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      _t(
+                        ar:
+                            'تنبيه: القروض الربوية محرّمة في الشريعة الإسلامية. هذا التطبيق أداة حسابية فقط لعرض التكلفة/الفائدة ولا يُعد نصيحة بالاقتراض.',
+                        en:
+                            'Notice: Interest-based loans are prohibited in Islamic Sharia. This app is a calculator only to show costs/interest and is not a recommendation to take loans.',
+                      ),
                     ),
                   ],
                 ),
@@ -159,10 +140,7 @@ class _LangTile extends StatelessWidget {
             if (selected)
               const Icon(Icons.check_circle, size: 18, color: Color(0xFF3B82F6)),
             if (selected) const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
       ),
