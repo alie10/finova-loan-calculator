@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'app_lang.dart';
+
 // Pages
 import '../features/loan/loan_page.dart';
 import '../features/compare/compare_page.dart';
@@ -9,9 +11,6 @@ import '../features/savings/savings_page.dart';
 import '../features/settings/settings_page.dart';
 
 const String _kPrefLangCode = 'finova_lang_code';
-
-/// App language enum (kept for compatibility with existing pages).
-enum AppLang { ar, en }
 
 /// Controller exposed via FinovaApp.of(context)
 class FinovaController {
@@ -31,7 +30,7 @@ class FinovaController {
 class FinovaApp extends StatefulWidget {
   const FinovaApp({super.key});
 
-  /// Compatibility: existing pages call FinovaApp.of(context)
+  /// Pages already call FinovaApp.of(context)
   static FinovaController of(BuildContext context) {
     final state = context.findAncestorStateOfType<_FinovaAppState>();
     if (state == null) {
