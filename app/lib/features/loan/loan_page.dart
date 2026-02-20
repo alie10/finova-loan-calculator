@@ -1,12 +1,8 @@
 import 'dart:math';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/ads.dart';
-import '../../core/app.dart';
-import '../../core/app_lang.dart';
+import '../../core/ads/ad_service.dart';
+import '../../core/app.dart'; // يحتوي FinovaApp + AppLang (حسب مشروعك الحالي)
 
 class LoanPage extends StatefulWidget {
   const LoanPage({super.key});
@@ -16,37 +12,22 @@ class LoanPage extends StatefulWidget {
 }
 
 class _LoanPageState extends State<LoanPage> {
-  final _formKey = GlobalKey<FormState>();
-
   final _amountCtrl = TextEditingController(text: '10000');
   final _rateCtrl = TextEditingController(text: '10');
   final _termCtrl = TextEditingController(text: '5');
 
-  bool _termIsYears = true;
+  bool _termInYears = true;
 
   String _currency = 'USD';
-  final List<String> _currencies = const ['USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED'];
+  final List<String> _currencies = const ['USD', 'EGP', 'SAR', 'AED', 'EUR'];
 
-  bool _loadedPrefs = false;
-  bool _showIslamicNotice = true;
+  double? _monthlyPayment;
+  double? _totalPayment;
+  double? _totalInterest;
 
-  _LoanResult? _result;
+  bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadPrefs();
-  }
-
-  Future<void> _loadPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isArabic = FinovaApp.of(context).lang == AppLang.ar;
-    final saved = prefs.getBool('show_islamic_notice');
-    setState(() {
-      _showIslamicNotice = saved ?? isArabic;
-      _loadedPrefs = true;
-    });
-  }
+  String t(String ar, String en) => _isArabic ? ar : en;
 
   @override
   void dispose() {
@@ -56,583 +37,369 @@ class _LoanPageState extends State<LoanPage> {
     super.dispose();
   }
 
-  bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
-  String _t({required String en, required String ar}) => _isArabic ? ar : en;
+  double _parseDouble(String s) => double.tryParse(s.trim().replaceAll(',', '')) ?? 0.0;
 
-  NumberFormat _moneyFormat() {
-    final locale = _isArabic ? 'ar' : 'en';
-    return NumberFormat.currency(locale: locale, name: _currency, symbol: '$_currency ');
-  }
-
-  NumberFormat _numFormat() {
-    final locale = _isArabic ? 'ar' : 'en';
-    return NumberFormat.decimalPattern(locale);
-  }
-
-  double _parseDouble(String s) => double.tryParse(s.trim().replaceAll(',', '')) ?? double.nan;
-  int _parseInt(String s) => int.tryParse(s.trim()) ?? -1;
-
-  int _termMonths() {
-    final term = _parseInt(_termCtrl.text);
-    if (term <= 0) return -1;
-    return _termIsYears ? term * 12 : term;
-  }
-
-  String? _validateAmount(String? v) {
-    final x = _parseDouble(v ?? '');
-    if (x.isNaN || x <= 0) return _t(en: 'Enter a valid amount', ar: 'أدخل مبلغًا صحيحًا');
-    if (x < 10) return _t(en: 'Minimum amount is 10', ar: 'الحد الأدنى للمبلغ 10');
-    if (x > 1000000000) return _t(en: 'Amount too large', ar: 'المبلغ كبير جدًا');
-    return null;
-  }
-
-  String? _validateRate(String? v) {
-    final x = _parseDouble(v ?? '');
-    if (x.isNaN || x < 0) return _t(en: 'Enter a valid rate (0–100)', ar: 'أدخل فائدة صحيحة (0–100)');
-    if (x > 100) return _t(en: 'Rate must be 0–100', ar: 'الفائدة يجب أن تكون بين 0 و 100');
-    return null;
-  }
-
-  String? _validateTerm(String? v) {
-    final x = _parseInt(v ?? '');
-    if (x <= 0) return _t(en: 'Enter a valid term', ar: 'أدخل مدة صحيحة');
-    final months = _termIsYears ? x * 12 : x;
-    if (months < 1) return _t(en: 'Term too short', ar: 'المدة قصيرة جدًا');
-    if (months > 600) return _t(en: 'Max term is 600 months', ar: 'الحد الأقصى 600 شهر');
-    return null;
-  }
-
-  Future<void> _calculate() async {
-    FocusScope.of(context).unfocus();
-
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    final double principal = _parseDouble(_amountCtrl.text);
-    final double annualRate = _parseDouble(_rateCtrl.text);
-    final int n = _termMonths();
-
-    if (principal.isNaN || annualRate.isNaN || n <= 0) return;
-
-    final double monthlyRate = annualRate / 12.0 / 100.0;
-
-    final double monthlyPayment = (monthlyRate == 0.0)
-        ? (principal / n.toDouble())
-        : (principal * monthlyRate * pow(1.0 + monthlyRate, n).toDouble()) /
-            (pow(1.0 + monthlyRate, n).toDouble() - 1.0);
-
-    final double totalPayment = monthlyPayment * n.toDouble();
-    final double totalInterest = max(0.0, totalPayment - principal);
-
-    setState(() {
-      _result = _LoanResult(
-        principal: principal,
-        annualRate: annualRate,
-        months: n,
-        monthlyPayment: monthlyPayment,
-        totalPayment: totalPayment,
-        totalInterest: totalInterest,
-      );
-    });
-
-    // Interstitial occasionally
-    await Ads.maybeShowInterstitial(context);
-
-    // Optional Islamic notice for Arabic
-    if (_showIslamicNotice && _isArabic) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          duration: Duration(seconds: 4),
-          content: Text('تنبيه: التطبيق آلة حساب فقط. القروض ذات الفائدة غير جائزة في كثير من الآراء.'),
-        ),
-      );
-    }
-  }
+  int _parseInt(String s) => int.tryParse(s.trim()) ?? 0;
 
   void _reset() {
-    FocusScope.of(context).unfocus();
     setState(() {
       _amountCtrl.text = '10000';
       _rateCtrl.text = '10';
       _termCtrl.text = '5';
-      _termIsYears = true;
+      _termInYears = true;
       _currency = 'USD';
-      _result = null;
+      _monthlyPayment = null;
+      _totalPayment = null;
+      _totalInterest = null;
     });
   }
 
-  List<_AmRow> _buildSchedule(_LoanResult r) {
-    final rows = <_AmRow>[];
-    final double monthlyRate = r.annualRate / 12.0 / 100.0;
+  double _calcEmi({
+    required double principal,
+    required double annualRatePercent,
+    required int months,
+  }) {
+    if (principal <= 0 || months <= 0) return 0.0;
 
-    double balance = r.principal;
-    final double payment = r.monthlyPayment;
+    final r = (annualRatePercent / 100.0) / 12.0; // monthly rate
+    if (r <= 0) return principal / months;
 
-    for (int i = 1; i <= r.months; i++) {
-      final double interest = (monthlyRate == 0.0) ? 0.0 : (balance * monthlyRate);
-      double principalPaid = payment - interest;
-      if (principalPaid > balance) principalPaid = balance;
-
-      balance = balance - principalPaid;
-      if (balance < 0.0) balance = 0.0;
-
-      rows.add(_AmRow(
-        month: i,
-        payment: payment,
-        interest: interest,
-        principal: principalPaid,
-        balance: balance,
-      ));
-
-      if (balance <= 0.0) break;
-    }
-    return rows;
+    final powVal = pow(1 + r, months).toDouble();
+    final emi = principal * r * powVal / (powVal - 1);
+    return emi.isFinite ? emi : 0.0;
   }
 
-  void _showSchedule() {
-    final r = _result;
-    if (r == null) return;
+  Future<void> _calculate() async {
+    final principal = _parseDouble(_amountCtrl.text);
+    final annualRate = _parseDouble(_rateCtrl.text);
+    final term = _parseInt(_termCtrl.text);
 
-    final rows = _buildSchedule(r);
-    final money = _moneyFormat();
-    final numFmt = _numFormat();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 8,
-              bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _t(en: 'Amortization Schedule', ar: 'جدول السداد'),
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: MediaQuery.of(ctx).size.height * 0.65,
-                  child: ListView.separated(
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final row = rows[index];
-                      return ListTile(
-                        dense: true,
-                        title: Text(_t(en: 'Month', ar: 'شهر') + ' ${numFmt.format(row.month)}'),
-                        subtitle: Text(
-                          _t(en: 'Principal', ar: 'أصل') +
-                              ': ${money.format(row.principal)}   •   ' +
-                              _t(en: 'Interest', ar: 'فائدة') +
-                              ': ${money.format(row.interest)}',
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              money.format(row.payment),
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _t(en: 'Bal', ar: 'المتبقي') + ': ${money.format(row.balance)}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildInputCard() {
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              DropdownButtonFormField<String>(
-                value: _currency,
-                decoration: InputDecoration(
-                  labelText: _t(en: 'Currency', ar: 'العملة'),
-                  border: const OutlineInputBorder(),
-                ),
-                items: _currencies.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                onChanged: (v) => setState(() => _currency = v ?? 'USD'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _amountCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: _validateAmount,
-                decoration: InputDecoration(
-                  labelText: _t(en: 'Loan Amount', ar: 'مبلغ القرض'),
-                  prefixIcon: const Icon(Icons.payments_outlined),
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _rateCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: _validateRate,
-                decoration: InputDecoration(
-                  labelText: _t(en: 'Interest Rate (%)', ar: 'نسبة الفائدة (%)'),
-                  prefixIcon: const Icon(Icons.percent),
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _termCtrl,
-                      keyboardType: TextInputType.number,
-                      validator: _validateTerm,
-                      decoration: InputDecoration(
-                        labelText: _t(en: 'Term', ar: 'المدة'),
-                        prefixIcon: const Icon(Icons.calendar_month_outlined),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SegmentedButton<bool>(
-                    segments: [
-                      ButtonSegment(value: true, label: Text(_t(en: 'Years', ar: 'سنوات'))),
-                      ButtonSegment(value: false, label: Text(_t(en: 'Months', ar: 'شهور'))),
-                    ],
-                    selected: {_termIsYears},
-                    onSelectionChanged: (s) {
-                      setState(() => _termIsYears = s.first);
-                      _formKey.currentState?.validate();
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _calculate,
-                      icon: const Icon(Icons.calculate),
-                      label: Text(_t(en: 'Calculate', ar: 'احسب')),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton(
-                    onPressed: _reset,
-                    child: Text(_t(en: 'Reset', ar: 'إعادة')),
-                  ),
-                ],
-              ),
-              if (_showIslamicNotice && _isArabic) ...[
-                const SizedBox(height: 12),
-                const _IslamicInlineNotice(),
-              ],
-            ],
+    if (principal <= 0 || term <= 0 || annualRate < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            t('من فضلك أدخل أرقام صحيحة.', 'Please enter valid numbers.'),
           ),
         ),
-      ),
-    );
+      );
+      return;
+    }
+
+    final months = _termInYears ? term * 12 : term;
+
+    final monthly = _calcEmi(principal: principal, annualRatePercent: annualRate, months: months);
+    final total = monthly * months;
+    final interest = total - principal;
+
+    setState(() {
+      _monthlyPayment = monthly;
+      _totalPayment = total;
+      _totalInterest = interest;
+    });
+
+    // ✅ عرض Interstitial بذكاء (مش كل مرة)
+    await AdService.instance.maybeShowInterstitial();
   }
 
-  Widget _buildResultCard(_LoanResult r) {
-    final money = _moneyFormat();
+  String _fmt(double v) {
+    // تنسيق بسيط بدون حزم إضافية
+    final s = v.toStringAsFixed(2);
+    return s;
+  }
 
-    final double principal = r.principal;
-    final double interest = max(0.0, r.totalInterest);
-    final double total = principal + interest;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
-    final sections = [
-      PieChartSectionData(
-        value: principal <= 0.0 ? 0.0 : principal,
-        title: _t(en: 'Principal', ar: 'الأصل'),
-        radius: 48,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-      PieChartSectionData(
-        value: interest <= 0.0 ? 0.0 : interest,
-        title: _t(en: 'Interest', ar: 'الفائدة'),
-        radius: 48,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-    ];
-
-    return Card(
-      elevation: 0,
+    return Directionality(
+      textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: ListView(
           children: [
             Row(
               children: [
+                const Icon(Icons.public),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: _MetricTile(
-                    label: _t(en: 'Monthly Payment', ar: 'القسط الشهري'),
-                    value: money.format(r.monthlyPayment),
-                    icon: Icons.calendar_view_month_outlined,
+                  child: Text(
+                    t('حاسبة القرض', 'Loan Calculator'),
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // العملة
+            _CardField(
+              title: t('العملة', 'Currency'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _currency,
+                  items: _currencies
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _currency = v);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // مبلغ القرض
+            _CardField(
+              title: t('مبلغ القرض', 'Loan Amount'),
+              suffixIcon: const Icon(Icons.account_balance_wallet_outlined),
+              child: TextField(
+                controller: _amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: t('مثال: 10000', 'e.g. 10000'),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // نسبة الفائدة
+            _CardField(
+              title: t('نسبة الفائدة (%)', 'Interest Rate (%)'),
+              suffixIcon: const Icon(Icons.percent),
+              child: TextField(
+                controller: _rateCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: t('مثال: 10', 'e.g. 10'),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // المدة + سنوات/شهور
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _CardField(
+                    title: t('المدة', 'Term'),
+                    suffixIcon: const Icon(Icons.calendar_month_outlined),
+                    child: TextField(
+                      controller: _termCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: t('مثال: 5', 'e.g. 5'),
+                        border: InputBorder.none,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _MetricTile(
-                    label: _t(en: 'Total Payment', ar: 'إجمالي السداد'),
-                    value: money.format(r.totalPayment),
-                    icon: Icons.account_balance_wallet_outlined,
+                  flex: 3,
+                  child: _CardField(
+                    title: t('نوع المدة', 'Term Type'),
+                    child: SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment(
+                          value: false,
+                          label: Text(t('شهور', 'Months')),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          label: Text(t('سنوات', 'Years')),
+                        ),
+                      ],
+                      selected: {_termInYears},
+                      onSelectionChanged: (s) {
+                        setState(() => _termInYears = s.first);
+                      },
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            _MetricTile(
-              label: _t(en: 'Total Interest', ar: 'إجمالي الفائدة'),
-              value: money.format(r.totalInterest),
-              icon: Icons.trending_up,
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 140,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: PieChart(
-                      PieChartData(
-                        sectionsSpace: 2,
-                        centerSpaceRadius: 28,
-                        sections: sections,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _LegendRow(label: _t(en: 'Principal', ar: 'الأصل'), value: money.format(principal)),
-                        const SizedBox(height: 8),
-                        _LegendRow(label: _t(en: 'Interest', ar: 'الفائدة'), value: money.format(interest)),
-                        const SizedBox(height: 8),
-                        _LegendRow(label: _t(en: 'Total', ar: 'الإجمالي'), value: money.format(total)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
+
+            const SizedBox(height: 14),
+
+            // أزرار
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showSchedule,
-                    icon: const Icon(Icons.table_chart_outlined),
-                    label: Text(_t(en: 'View Schedule', ar: 'عرض الجدول')),
+                  child: OutlinedButton(
+                    onPressed: _reset,
+                    child: Text(t('إعادة', 'Reset')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _calculate,
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: Text(t('احسب', 'Calculate')),
                   ),
                 ),
               ],
             ),
-            if (_showIslamicNotice && _isArabic) ...[
-              const SizedBox(height: 10),
-              const _IslamicResultDisclaimer(),
+
+            const SizedBox(height: 14),
+
+            // تنبيه شرعي
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: theme.dividerColor.withOpacity(0.35)),
+              ),
+              child: Text(
+                t(
+                  'تنبيه شرعي: القروض ذات الفائدة تُعد غير جائزة في كثير من الآراء الفقهية. هذا التطبيق آلة حساب فقط ولا يُشجّع على الاقتراض.',
+                  'Sharia notice: Interest-based loans are considered impermissible by many scholarly opinions. This app is for calculation only and does not encourage borrowing.',
+                ),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+            Text(
+              t('ملاحظة: يمكنك وضع 0% لحساب التقسيط بدون فائدة.', 'Note: You can enter 0% to calculate installments without interest.'),
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+            ),
+
+            const SizedBox(height: 18),
+
+            // النتائج
+            if (_monthlyPayment != null) ...[
+              _ResultCard(
+                currency: _currency,
+                monthly: _monthlyPayment!,
+                total: _totalPayment ?? 0,
+                interest: _totalInterest ?? 0,
+                isArabic: _isArabic,
+                fmt: _fmt,
+              ),
+              const SizedBox(height: 24),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+class _CardField extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Widget? suffixIcon;
+
+  const _CardField({
+    required this.title,
+    required this.child,
+    this.suffixIcon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    if (!_loadedPrefs) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_t(en: 'Loan Calculator', ar: 'حاسبة القرض')),
-        actions: [
-          IconButton(
-            tooltip: _t(en: 'Language', ar: 'اللغة'),
-            onPressed: () => FinovaApp.of(context).toggle(),
-            icon: const Icon(Icons.language),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (suffixIcon != null) ...[
+                const SizedBox(width: 8),
+                suffixIcon!,
+              ],
+            ],
           ),
+          const SizedBox(height: 8),
+          child,
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildInputCard(),
-          const SizedBox(height: 12),
-          if (_result != null) _buildResultCard(_result!),
-          if (_result == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
+    );
+  }
+}
+
+class _ResultCard extends StatelessWidget {
+  final String currency;
+  final double monthly;
+  final double total;
+  final double interest;
+  final bool isArabic;
+  final String Function(double v) fmt;
+
+  const _ResultCard({
+    required this.currency,
+    required this.monthly,
+    required this.total,
+    required this.interest,
+    required this.isArabic,
+    required this.fmt,
+  });
+
+  String t(String ar, String en) => isArabic ? ar : en;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Widget row(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
               child: Text(
-                _t(
-                  en: 'Tip: Use 0% interest for simple installment calculation.',
-                  ar: 'ملاحظة: يمكنك وضع 0% لحساب التقسيط بدون فائدة.',
-                ),
-                style: Theme.of(context).textTheme.bodySmall,
+                label,
+                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
-        ],
-      ),
-      bottomNavigationBar: const AdBanner(),
-    );
-  }
-}
-
-class _LoanResult {
-  final double principal;
-  final double annualRate;
-  final int months;
-  final double monthlyPayment;
-  final double totalPayment;
-  final double totalInterest;
-
-  const _LoanResult({
-    required this.principal,
-    required this.annualRate,
-    required this.months,
-    required this.monthlyPayment,
-    required this.totalPayment,
-    required this.totalInterest,
-  });
-}
-
-class _AmRow {
-  final int month;
-  final double payment;
-  final double interest;
-  final double principal;
-  final double balance;
-
-  const _AmRow({
-    required this.month,
-    required this.payment,
-    required this.interest,
-    required this.principal,
-    required this.balance,
-  });
-}
-
-class _MetricTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-
-  const _MetricTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.5)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ],
+            Text(
+              value,
+              style: theme.textTheme.bodyMedium,
             ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.35)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            t('النتائج', 'Results'),
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
+          const SizedBox(height: 10),
+          row(t('القسط الشهري', 'Monthly Payment'), '${fmt(monthly)} $currency'),
+          row(t('إجمالي المبلغ', 'Total Payment'), '${fmt(total)} $currency'),
+          row(t('إجمالي الفائدة', 'Total Interest'), '${fmt(interest)} $currency'),
         ],
-      ),
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _LegendRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
-        const SizedBox(width: 8),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-      ],
-    );
-  }
-}
-
-class _IslamicInlineNotice extends StatelessWidget {
-  const _IslamicInlineNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
-      child: const Padding(
-        padding: EdgeInsets.all(12),
-        child: Text(
-          'تنبيه شرعي: القروض ذات الفائدة تُعد غير جائزة في كثير من الآراء الفقهية. '
-          'هذا التطبيق آلة حساب فقط ولا يشجّع على الاقتراض.',
-          style: TextStyle(fontSize: 12),
-        ),
-      ),
-    );
-  }
-}
-
-class _IslamicResultDisclaimer extends StatelessWidget {
-  const _IslamicResultDisclaimer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
-      child: const Padding(
-        padding: EdgeInsets.all(12),
-        child: Text(
-          'تنبيه: النتائج تقديرية لأغراض الحساب فقط. التطبيق لا يقدم نصيحة مالية ولا ينصح بأخذ قروض. '
-          'شرعًا: القروض ذات الفائدة غير جائزة في كثير من الآراء، فالأفضل تجنّبها واستشارة أهل العلم.',
-          style: TextStyle(fontSize: 12),
-        ),
       ),
     );
   }
