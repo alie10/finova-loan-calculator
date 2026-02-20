@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'ad_ids.dart';
 
@@ -11,38 +12,71 @@ class AdService {
   InterstitialAd? _interstitial;
   bool _loadingInterstitial = false;
 
-  // منع إزعاج المستخدم: أقل مدة بين الإعلانات البينية
-  DateTime? _lastInterstitialShownAt;
-  static const Duration _minGapBetweenInterstitial = Duration(minutes: 2);
+  // ✅ منطق “ذكي” لتقليل الإزعاج
+  int _actionCount = 0; // عدد ضغطات "احسب"
+  DateTime _lastInterstitialShown = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // إعدادات
+  static const int showEveryActions = 6; // يظهر كل 6 عمليات
+  static const Duration cooldown = Duration(seconds: 90);
 
   Future<void> initialize() async {
     if (_initialized) return;
     await MobileAds.instance.initialize();
     _initialized = true;
-
-    // حضّر إعلان بيني من بدري
-    _loadInterstitial();
+    _preloadInterstitial();
   }
 
-  /// Banner Ad factory
-  BannerAd createBannerAd({
-    AdSize size = AdSize.banner,
-  }) {
-    return BannerAd(
-      adUnitId: AdIds.banner,
-      size: size,
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {},
-        onAdFailedToLoad: (ad, err) {
-          ad.dispose();
-        },
-      ),
+  // يستدعى عند الضغط على "احسب"
+  Future<void> maybeShowInterstitial() async {
+    if (!_initialized) return;
+
+    _actionCount++;
+
+    final now = DateTime.now();
+    final cooldownOk = now.difference(_lastInterstitialShown) >= cooldown;
+    final countOk = (_actionCount % showEveryActions) == 0;
+
+    if (!countOk || !cooldownOk) {
+      // حمّل إعلان احتياطيًا
+      _preloadInterstitial();
+      return;
+    }
+
+    if (_interstitial == null) {
+      _preloadInterstitial();
+      return;
+    }
+
+    final ad = _interstitial!;
+    _interstitial = null;
+
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _preloadInterstitial();
+      },
+      onAdFailedToShowFullScreenContent: (ad, err) {
+        ad.dispose();
+        _preloadInterstitial();
+      },
     );
+
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      ad.show();
+      _lastInterstitialShown = DateTime.now();
+    } catch (_) {
+      // تجاهل
+      _preloadInterstitial();
+    }
   }
 
-  void _loadInterstitial() {
+  void _preloadInterstitial() {
+    if (!_initialized) return;
     if (_loadingInterstitial) return;
+    if (_interstitial != null) return;
+
     _loadingInterstitial = true;
 
     InterstitialAd.load(
@@ -50,53 +84,20 @@ class AdService {
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
         onAdLoaded: (ad) {
-          _interstitial = ad;
           _loadingInterstitial = false;
-
-          ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              _interstitial = null;
-              _loadInterstitial();
-            },
-            onAdFailedToShowFullScreenContent: (ad, err) {
-              ad.dispose();
-              _interstitial = null;
-              _loadInterstitial();
-            },
-          );
+          _interstitial = ad;
         },
         onAdFailedToLoad: (err) {
           _loadingInterstitial = false;
+          _interstitial = null;
 
-          // إعادة محاولة بعد شوية
-          Timer(const Duration(seconds: 20), () {
-            _loadInterstitial();
-          });
+          // في بعض الحسابات الجديدة ممكن يبقى "no fill" مؤقت
+          if (!kReleaseMode) {
+            // ignore: avoid_print
+            print('Interstitial failed: ${err.code} ${err.message}');
+          }
         },
       ),
     );
-  }
-
-  /// عرض إعلان بيني "بهدوء" (بدون إزعاج): لو لسه ما جهّزش أو الوقت قريب، مش هيعرض
-  Future<bool> showInterstitialIfAllowed() async {
-    if (!_initialized) return false;
-
-    // لو اتعرض قريب، بلاش
-    final last = _lastInterstitialShownAt;
-    if (last != null && DateTime.now().difference(last) < _minGapBetweenInterstitial) {
-      return false;
-    }
-
-    final ad = _interstitial;
-    if (ad == null) {
-      _loadInterstitial();
-      return false;
-    }
-
-    _lastInterstitialShownAt = DateTime.now();
-    await ad.show();
-    _interstitial = null;
-    return true;
   }
 }
