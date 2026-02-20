@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import '../core/ads/ad_service.dart';
+
+import '../core/ads/ad_ids.dart';
 
 class AdBanner extends StatefulWidget {
   const AdBanner({super.key});
@@ -10,44 +11,50 @@ class AdBanner extends StatefulWidget {
 }
 
 class _AdBannerState extends State<AdBanner> {
-  BannerAd? _ad;
-  bool _loaded = false;
+  BannerAd? _bannerAd;
+  bool _isLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    final ad = AdService.instance.createBannerAd(size: AdSize.banner);
 
-    ad.listener = BannerAdListener(
-      onAdLoaded: (ad) {
-        if (!mounted) return;
-        setState(() => _loaded = true);
-      },
-      onAdFailedToLoad: (ad, err) {
-        ad.dispose();
-      },
-    );
-
-    _ad = ad;
-    ad.load();
+    _bannerAd = BannerAd(
+      adUnitId: AdIds.banner,
+      request: const AdRequest(),
+      size: AdSize.banner,
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (!mounted) return;
+          setState(() => _isLoaded = true);
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          if (!mounted) return;
+          setState(() {
+            _bannerAd = null;
+            _isLoaded = false;
+          });
+        },
+      ),
+    )..load();
   }
 
   @override
   void dispose() {
-    _ad?.dispose();
+    _bannerAd?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final ad = _ad;
-    if (!_loaded || ad == null) return const SizedBox.shrink();
+    final ad = _bannerAd;
+    if (!_isLoaded || ad == null) return const SizedBox.shrink();
 
     return SafeArea(
       top: false,
       child: SizedBox(
-        height: ad.size.height.toDouble(),
         width: ad.size.width.toDouble(),
+        height: ad.size.height.toDouble(),
         child: AdWidget(ad: ad),
       ),
     );
