@@ -1,22 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
-// ✅ استورد صفحاتك هنا حسب المسارات الموجودة عندك
-// لو أسماء الصفحات مختلفة عندك، قولّي أسماء الملفات الموجودة عندك وأنا أضبطها فورًا.
-import '../features/home/home_page.dart';
+// Pages
+import '../features/loan/loan_page.dart';
+import '../features/compare/compare_page.dart';
+import '../features/savings/savings_page.dart';
 import '../features/settings/settings_page.dart';
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+const String _kPrefLangCode = 'finova_lang_code';
 
-  @override
-  State<MyApp> createState() => _MyAppState();
+/// Call this from anywhere to change app locale.
+Future<void> setAppLocale(BuildContext context, Locale locale) async {
+  final state = context.findAncestorStateOfType<_FinovaAppState>();
+  if (state == null) return;
+
+  await state.setLocale(locale);
 }
 
-class _MyAppState extends State<MyApp> {
-  static const _prefLangKey = 'app_lang';
-  Locale _locale = const Locale('en');
+class FinovaApp extends StatefulWidget {
+  const FinovaApp({super.key});
+
+  @override
+  State<FinovaApp> createState() => _FinovaAppState();
+}
+
+class _FinovaAppState extends State<FinovaApp> {
+  Locale _locale = const Locale('ar');
 
   @override
   void initState() {
@@ -26,118 +36,145 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _loadSavedLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final code = prefs.getString(_prefLangKey);
-    if (code == 'ar') {
-      setState(() => _locale = const Locale('ar'));
-    } else if (code == 'en') {
-      setState(() => _locale = const Locale('en'));
-    } else {
-      // default Arabic لو أنت عايزها افتراضي
-      setState(() => _locale = const Locale('ar'));
-    }
+    final code = prefs.getString(_kPrefLangCode) ?? 'ar';
+    setState(() => _locale = Locale(code));
   }
 
   Future<void> setLocale(Locale locale) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefLangKey, locale.languageCode);
+    await prefs.setString(_kPrefLangCode, locale.languageCode);
     setState(() => _locale = locale);
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = ThemeData(
+    final base = ThemeData(
       useMaterial3: true,
+      brightness: Brightness.light,
       colorSchemeSeed: const Color(0xFF3B82F6),
-      scaffoldBackgroundColor: const Color(0xFFF7F9FC),
+      scaffoldBackgroundColor: const Color(0xFFF7F7FB),
+    );
+
+    final theme = base.copyWith(
       appBarTheme: const AppBarTheme(
-        centerTitle: true,
+        centerTitle: false,
+        elevation: 0,
         backgroundColor: Colors.transparent,
-        elevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         elevation: 0,
-        margin: EdgeInsets.all(12),
+        color: Colors.white,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+        ),
       ),
-      inputDecorationTheme: InputDecorationTheme(
+      inputDecorationTheme: const InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFFE5E7EB)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFFE5E7EB)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.4),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFF3B82F6), width: 1.6),
+        ),
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+    );
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Finova',
+      theme: theme,
+      locale: _locale,
+      supportedLocales: const [
+        Locale('ar'),
+        Locale('en'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const HomePage(),
+    );
+  }
+}
+
+/// Home with tabs (Loan / Compare / Savings / Settings)
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final lang = Localizations.localeOf(context).languageCode;
+    final isAr = lang == 'ar';
+
+    final pages = const [
+      LoanPage(),
+      ComparePage(),
+      SavingsPage(),
+      SettingsPage(),
+    ];
+
+    final items = <BottomNavigationBarItem>[
+      BottomNavigationBarItem(
+        icon: const Icon(Icons.calculate_outlined),
+        label: isAr ? 'القرض' : 'Loan',
+      ),
+      BottomNavigationBarItem(
+        icon: const Icon(Icons.compare_arrows_outlined),
+        label: isAr ? 'المقارنة' : 'Compare',
+      ),
+      BottomNavigationBarItem(
+        icon: const Icon(Icons.savings_outlined),
+        label: isAr ? 'الادخار' : 'Savings',
+      ),
+      BottomNavigationBarItem(
+        icon: const Icon(Icons.settings_outlined),
+        label: isAr ? 'الإعدادات' : 'Settings',
+      ),
+    ];
+
+    return Directionality(
+      textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        body: SafeArea(
+          child: IndexedStack(
+            index: _index,
+            children: pages,
+          ),
+        ),
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+            color: Colors.white,
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _index,
+            onTap: (v) => setState(() => _index = v),
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: const Color(0xFF3B82F6),
+            unselectedItemColor: const Color(0xFF6B7280),
+            items: items,
+          ),
         ),
       ),
     );
-
-    return _LocaleScope(
-      locale: _locale,
-      setLocale: setLocale,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Finova',
-        theme: theme,
-        locale: _locale,
-        supportedLocales: const [
-          Locale('en'),
-          Locale('ar'),
-        ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        localeResolutionCallback: (deviceLocale, supportedLocales) {
-          // لو اللغة المحفوظة موجودة هنستخدمها، وإلا هنحاول لغة الجهاز
-          if (_locale.languageCode == 'ar' || _locale.languageCode == 'en') {
-            return _locale;
-          }
-          if (deviceLocale == null) return const Locale('en');
-          for (final l in supportedLocales) {
-            if (l.languageCode == deviceLocale.languageCode) return l;
-          }
-          return const Locale('en');
-        },
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const HomePage(),
-          '/settings': (context) => const SettingsPage(),
-        },
-      ),
-    );
   }
-}
-
-/// ✅ scope بسيط علشان صفحات Settings تقدر تغيّر اللغة
-class _LocaleScope extends InheritedWidget {
-  final Locale locale;
-  final Future<void> Function(Locale) setLocale;
-
-  const _LocaleScope({
-    required this.locale,
-    required this.setLocale,
-    required super.child,
-  });
-
-  static _LocaleScope of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<_LocaleScope>();
-    assert(scope != null, 'LocaleScope not found');
-    return scope!;
-  }
-
-  @override
-  bool updateShouldNotify(covariant _LocaleScope oldWidget) {
-    return oldWidget.locale != locale;
-  }
-}
-
-/// Helper علشان أي صفحة تقدر تنادي تغيير اللغة بسهولة
-Future<void> setAppLocale(BuildContext context, Locale locale) async {
-  await _LocaleScope.of(context).setLocale(locale);
 }
