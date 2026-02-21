@@ -1,103 +1,64 @@
-import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'ad_ids.dart';
 
 class AdService {
   AdService._();
   static final AdService instance = AdService._();
 
+  /// ✅ خليها true أثناء التطوير عشان تتأكد إن كل حاجة شغالة 100%
+  /// ولما ترفع إصدار نهائي على المتجر خليها false.
+  static const bool useTestAds = false;
+
+  // ====== IDs (Android) ======
+  // App ID (Android) — لازم يكون في AndroidManifest كمان
+  static const String androidAppId = 'ca-app-pub-1243924347643904~8738724931';
+
+  // Banner Ad Unit IDs (Android)
+  // عندك بانرين: ali و Quran
+  static const String androidBannerAli = 'ca-app-pub-1243924347643904/5595345403';
+  static const String androidBannerQuran = 'ca-app-pub-1243924347643904/9597475578';
+
+  // ✅ Test Banner Unit (Google الرسمي) — بيظهر دائمًا
+  static const String testBanner = 'ca-app-pub-3940256099942544/6300978111';
+
   bool _initialized = false;
-
-  InterstitialAd? _interstitial;
-  bool _loadingInterstitial = false;
-
-  // ✅ منطق “ذكي” لتقليل الإزعاج
-  int _actionCount = 0; // عدد ضغطات "احسب"
-  DateTime _lastInterstitialShown = DateTime.fromMillisecondsSinceEpoch(0);
-
-  // إعدادات
-  static const int showEveryActions = 6; // يظهر كل 6 عمليات
-  static const Duration cooldown = Duration(seconds: 90);
 
   Future<void> initialize() async {
     if (_initialized) return;
-    await MobileAds.instance.initialize();
     _initialized = true;
-    _preloadInterstitial();
+
+    // تهيئة SDK
+    final status = await MobileAds.instance.initialize();
+
+    debugPrint('[AdService] MobileAds initialized.');
+    debugPrint('[AdService] Adapter statuses: ${status.adapterStatuses.keys.join(", ")}');
+
+    // (اختياري) أثناء التطوير تقدر تضيف جهازك كـ test device عشان تقلل مشاكل العرض
+    // ضع هنا deviceId الحقيقي من اللوج لو احتجنا.
+    // MobileAds.instance.updateRequestConfiguration(
+    //   RequestConfiguration(testDeviceIds: ['YOUR_DEVICE_ID']),
+    // );
   }
 
-  // يستدعى عند الضغط على "احسب"
-  Future<void> maybeShowInterstitial() async {
-    if (!_initialized) return;
+  /// يرجع Ad Unit ID المناسب للبانر
+  String bannerUnitId({bool preferAli = true}) {
+    if (useTestAds) return testBanner;
 
-    _actionCount++;
-
-    final now = DateTime.now();
-    final cooldownOk = now.difference(_lastInterstitialShown) >= cooldown;
-    final countOk = (_actionCount % showEveryActions) == 0;
-
-    if (!countOk || !cooldownOk) {
-      // حمّل إعلان احتياطيًا
-      _preloadInterstitial();
-      return;
+    if (!Platform.isAndroid) {
+      // لو أضفت iOS بعدين هنحط IDs هنا
+      return testBanner;
     }
 
-    if (_interstitial == null) {
-      _preloadInterstitial();
-      return;
-    }
-
-    final ad = _interstitial!;
-    _interstitial = null;
-
-    ad.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
-        ad.dispose();
-        _preloadInterstitial();
-      },
-      onAdFailedToShowFullScreenContent: (ad, err) {
-        ad.dispose();
-        _preloadInterstitial();
-      },
-    );
-
-    try {
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-      ad.show();
-      _lastInterstitialShown = DateTime.now();
-    } catch (_) {
-      // تجاهل
-      _preloadInterstitial();
-    }
+    return preferAli ? androidBannerAli : androidBannerQuran;
   }
 
-  void _preloadInterstitial() {
-    if (!_initialized) return;
-    if (_loadingInterstitial) return;
-    if (_interstitial != null) return;
-
-    _loadingInterstitial = true;
-
-    InterstitialAd.load(
-      adUnitId: AdIds.interstitial,
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _loadingInterstitial = false;
-          _interstitial = ad;
-        },
-        onAdFailedToLoad: (err) {
-          _loadingInterstitial = false;
-          _interstitial = null;
-
-          // في بعض الحسابات الجديدة ممكن يبقى "no fill" مؤقت
-          if (!kReleaseMode) {
-            // ignore: avoid_print
-            print('Interstitial failed: ${err.code} ${err.message}');
-          }
-        },
-      ),
+  AdRequest request() {
+    return const AdRequest(
+      // Keywords اختيارية
+      // keywords: ['finance', 'calculator', 'loan'],
+      nonPersonalizedAds: false,
     );
   }
 }
