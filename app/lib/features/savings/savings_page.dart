@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app.dart';
-import '../../core/app_lang.dart';
+
 import '../../widgets/ad_banner.dart';
 
 class SavingsPage extends StatefulWidget {
