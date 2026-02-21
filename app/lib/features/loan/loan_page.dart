@@ -1,11 +1,9 @@
 import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/app.dart';
+import '../../core/app_lang.dart' as lang;
 
-import '../../widgets/ad_banner.dart';
-import '../../core/ads/ad_service.dart';
 class LoanPage extends StatefulWidget {
   const LoanPage({super.key});
 
@@ -26,7 +24,8 @@ class _LoanPageState extends State<LoanPage> {
   double? _totalPayment;
   double? _totalInterest;
 
-  bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
+  bool get _isArabic => FinovaApp.of(context).lang == lang.AppLang.ar;
+  String t(String ar, String en) => _isArabic ? ar : en;
 
   @override
   void dispose() {
@@ -36,11 +35,9 @@ class _LoanPageState extends State<LoanPage> {
     super.dispose();
   }
 
-  String _t(String ar, String en) => _isArabic ? ar : en;
-
   double _parseNum(String v) => double.tryParse(v.trim()) ?? 0;
 
-  void _reset() {
+  void _resetResults() {
     setState(() {
       _monthlyPayment = null;
       _totalPayment = null;
@@ -54,19 +51,16 @@ class _LoanPageState extends State<LoanPage> {
 
     final principal = _parseNum(_amountCtrl.text);
     final annualRate = _parseNum(_rateCtrl.text) / 100.0;
-
     final termValue = _parseNum(_termCtrl.text);
     final months = _termIsYears ? (termValue * 12.0).round() : termValue.round();
 
     if (principal <= 0 || months <= 0) {
-      _showSnack(_t('من فضلك أدخل قيم صحيحة.', 'Please enter valid values.'));
+      _snack(t('من فضلك أدخل قيم صحيحة.', 'Please enter valid values.'));
       return;
     }
 
-    // monthly interest rate
     final r = annualRate / 12.0;
 
-    // If r == 0 -> simple division
     final monthly = (r == 0)
         ? (principal / months)
         : (principal * r) / (1 - math.pow(1 + r, -months));
@@ -81,24 +75,20 @@ class _LoanPageState extends State<LoanPage> {
     });
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   String _fmt(double v) => v.toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
-    final isArabic = _isArabic;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(_t('حاسبة القرض', 'Loan Calculator')),
+        title: Text(t('حاسبة القرض', 'Loan Calculator')),
         actions: [
           IconButton(
-            tooltip: _t('تبديل اللغة', 'Toggle language'),
+            tooltip: t('تبديل اللغة', 'Toggle language'),
             onPressed: () => FinovaApp.of(context).toggle(),
             icon: const Icon(Icons.language),
           ),
@@ -106,124 +96,100 @@ class _LoanPageState extends State<LoanPage> {
       ),
       body: SafeArea(
         child: Directionality(
-          textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+          textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const AdBanner(),
-              const SizedBox(height: 12),
-
               Form(
                 key: _formKey,
                 child: Column(
                   children: [
                     _field(
-                      label: _t('العملة', 'Currency'),
-                      child: DropdownButtonFormField<String>(
-                        value: 'USD',
-                        items: const [
-                          DropdownMenuItem(value: 'USD', child: Text('USD')),
-                          DropdownMenuItem(value: 'EGP', child: Text('EGP')),
-                          DropdownMenuItem(value: 'SAR', child: Text('SAR')),
-                          DropdownMenuItem(value: 'AED', child: Text('AED')),
-                        ],
-                        onChanged: (_) {},
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _field(
-                      label: _t('مبلغ القرض', 'Loan Amount'),
+                      label: t('مبلغ القرض', 'Loan Amount'),
                       child: TextFormField(
                         controller: _amountCtrl,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          hintText: _t('مثال: 10000', 'e.g. 10000'),
+                          hintText: t('مثال: 10000', 'e.g. 10000'),
                           prefixIcon: const Icon(Icons.payments_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                         ),
                         validator: (v) {
                           final x = _parseNum(v ?? '');
-                          if (x <= 0) return _t('أدخل مبلغ صحيح', 'Enter a valid amount');
+                          if (x <= 0) return t('أدخل مبلغ صحيح', 'Enter a valid amount');
                           return null;
                         },
-                        onChanged: (_) => _reset(),
+                        onChanged: (_) => _resetResults(),
                       ),
                     ),
                     const SizedBox(height: 12),
                     _field(
-                      label: _t('نسبة الفائدة (%)', 'Interest Rate (%)'),
+                      label: t('نسبة الفائدة (%)', 'Interest Rate (%)'),
                       child: TextFormField(
                         controller: _rateCtrl,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          hintText: _t('مثال: 10', 'e.g. 10'),
+                          hintText: t('مثال: 10', 'e.g. 10'),
                           prefixIcon: const Icon(Icons.percent),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                         ),
                         validator: (v) {
                           final x = _parseNum(v ?? '');
-                          if (x < 0) return _t('أدخل نسبة صحيحة', 'Enter a valid rate');
+                          if (x < 0) return t('أدخل نسبة صحيحة', 'Enter a valid rate');
                           return null;
                         },
-                        onChanged: (_) => _reset(),
+                        onChanged: (_) => _resetResults(),
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     Row(
                       children: [
                         Expanded(
                           child: _field(
-                            label: _t('المدة', 'Term'),
+                            label: t('المدة', 'Term'),
                             child: TextFormField(
                               controller: _termCtrl,
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
-                                hintText: _t('مثال: 5', 'e.g. 5'),
+                                hintText: t('مثال: 5', 'e.g. 5'),
                                 prefixIcon: const Icon(Icons.calendar_month_outlined),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                               ),
                               validator: (v) {
                                 final x = _parseNum(v ?? '');
-                                if (x <= 0) return _t('أدخل مدة صحيحة', 'Enter a valid term');
+                                if (x <= 0) return t('أدخل مدة صحيحة', 'Enter a valid term');
                                 return null;
                               },
-                              onChanged: (_) => _reset(),
+                              onChanged: (_) => _resetResults(),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: _field(
-                            label: _t('الوحدة', 'Unit'),
+                            label: t('الوحدة', 'Unit'),
                             child: SegmentedButton<bool>(
                               segments: [
-                                ButtonSegment(
-                                  value: false,
-                                  label: Text(_t('شهور', 'Months')),
-                                ),
-                                ButtonSegment(
-                                  value: true,
-                                  label: Text(_t('سنوات', 'Years')),
-                                ),
+                                ButtonSegment(value: false, label: Text(t('شهور', 'Months'))),
+                                ButtonSegment(value: true, label: Text(t('سنوات', 'Years'))),
                               ],
                               selected: {_termIsYears},
                               onSelectionChanged: (s) {
-                                setState(() {
-                                  _termIsYears = s.first;
-                                });
-                                _reset();
+                                setState(() => _termIsYears = s.first);
+                                _resetResults();
                               },
                             ),
                           ),
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: _reset,
-                            child: Text(_t('إعادة', 'Reset')),
+                            onPressed: _resetResults,
+                            child: Text(t('إعادة', 'Reset')),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -231,39 +197,32 @@ class _LoanPageState extends State<LoanPage> {
                           child: FilledButton.icon(
                             onPressed: _calculate,
                             icon: const Icon(Icons.calculate_outlined),
-                            label: Text(_t('احسب', 'Calculate')),
+                            label: Text(t('احسب', 'Calculate')),
                           ),
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Theme.of(context).dividerColor),
                       ),
                       child: Text(
-                        _t(
-                          'تنبيه شرعي: القروض ذات الفائدة تعد غير جائزة في كثير من الآراء الفقهية. هذا التطبيق آلة حساب فقط ولا يشجع على الاقتراض.',
-                          'Sharia notice: Interest-based loans are considered impermissible by many scholars. This app is for calculation only and does not encourage borrowing.',
+                        t(
+                          'تنبيه شرعي: القروض ذات الفائدة قد تُعد غير جائزة في كثير من الآراء الفقهية. هذا التطبيق آلة حساب فقط ولا يشجع على الاقتراض.',
+                          'Sharia notice: Interest-based loans may be impermissible by many opinions. This app is a calculator only and does not encourage borrowing.',
                         ),
-                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
                     if (_monthlyPayment != null) ...[
-                      _resultTile(_t('القسط الشهري', 'Monthly Payment'), _fmt(_monthlyPayment!)),
-                      _resultTile(_t('إجمالي السداد', 'Total Payment'), _fmt(_totalPayment!)),
-                      _resultTile(_t('إجمالي الفائدة', 'Total Interest'), _fmt(_totalInterest!)),
-                      const SizedBox(height: 16),
+                      _resultTile(t('القسط الشهري', 'Monthly Payment'), _fmt(_monthlyPayment!)),
+                      _resultTile(t('إجمالي السداد', 'Total Payment'), _fmt(_totalPayment!)),
+                      _resultTile(t('إجمالي الفائدة', 'Total Interest'), _fmt(_totalInterest!)),
                     ],
-
-                    const AdBanner(),
                   ],
                 ),
               ),
@@ -289,10 +248,7 @@ class _LoanPageState extends State<LoanPage> {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(title),
-      trailing: Text(
-        value,
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
+      trailing: Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
     );
   }
 }
