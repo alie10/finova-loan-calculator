@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/app.dart';
 import '../../core/app_lang.dart';
 import '../../widgets/ad_banner.dart';
-
+import '../../core/ads/ad_service.dart';
 class LoanPage extends StatefulWidget {
   const LoanPage({super.key});
 
