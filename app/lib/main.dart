@@ -1,4 +1,3 @@
-// app/lib/main.dart
 import 'package:flutter/material.dart';
 
 import 'core/app.dart';
@@ -6,6 +5,9 @@ import 'core/ads/ad_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize AdMob early (safe)
   await AdService.instance.initialize();
+
   runApp(const FinovaApp());
 }
