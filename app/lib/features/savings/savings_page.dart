@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app.dart';
+import '../../core/app_lang.dart' as lang;
 import '../../widgets/ad_banner.dart';
 
 class SavingsPage extends StatefulWidget {
@@ -11,7 +12,7 @@ class SavingsPage extends StatefulWidget {
 }
 
 class _SavingsPageState extends State<SavingsPage> {
-  bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
+  bool get _isArabic => FinovaApp.of(context).lang == lang.AppLang.ar;
 
   final _goalCtrl = TextEditingController(text: '10000');
   final _monthlyCtrl = TextEditingController(text: '500');
@@ -164,7 +165,7 @@ class _Field extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.number,
+      keyboardType: TextInputType.number,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
