@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app.dart';
-
-import '../../widgets/ad_banner.dart';
+import '../../core/app_lang.dart' as lang;
 
 class ComparePage extends StatefulWidget {
   const ComparePage({super.key});
@@ -12,45 +11,32 @@ class ComparePage extends StatefulWidget {
 }
 
 class _ComparePageState extends State<ComparePage> {
-  bool get _isArabic => FinovaApp.of(context).lang == AppLang.ar;
-  String _t(String ar, String en) => _isArabic ? ar : en;
+  bool get _isArabic => FinovaApp.of(context).lang == lang.AppLang.ar;
+  String t(String ar, String en) => _isArabic ? ar : en;
 
   @override
   Widget build(BuildContext context) {
-    final isArabic = _isArabic;
-
-    return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(_t('المقارنة', 'Compare')),
-          actions: [
-            IconButton(
-              onPressed: () => FinovaApp.of(context).toggle(),
-              icon: const Icon(Icons.language),
-            ),
-          ],
-        ),
-        body: SafeArea(
-          child: ListView(
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(t('المقارنة', 'Compare')),
+        actions: [
+          IconButton(
+            onPressed: () => FinovaApp.of(context).toggle(),
+            icon: const Icon(Icons.language),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Directionality(
+          textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
+          child: Padding(
             padding: const EdgeInsets.all(16),
-            children: [
-              const AdBanner(),
-              const SizedBox(height: 12),
-              Text(
-                _t('صفحة المقارنة (قيد التحسين)', 'Comparison page (being improved)'),
-                style: Theme.of(context).textTheme.titleMedium,
+            child: Text(
+              t(
+                'صفحة المقارنة جاهزة كبداية — ويمكن تطويرها لاحقًا لإدخال خيارين ومقارنة القسط والإجمالي.',
+                'Comparison page base is ready — can be improved later to compare two options.',
               ),
-              const SizedBox(height: 8),
-              Text(
-                _t(
-                  'هنا هنضيف مقارنة بين أكثر من سيناريو قرض/تقسيط (مثلاً: بنك A vs بنك B) مع عرض القسط والإجمالي والفائدة.',
-                  'Here we will add comparison between multiple loan scenarios (e.g., Bank A vs Bank B) showing monthly payment, totals, and interest.',
-                ),
-              ),
-              const SizedBox(height: 16),
-              const AdBanner(),
-            ],
+            ),
           ),
         ),
       ),
