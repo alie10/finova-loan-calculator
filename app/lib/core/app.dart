@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'app_lang.dart';
 
+// صفحات التطبيق (لازم imports تكون فوق)
+import '../features/loan/loan_page.dart';
+import '../features/compare/compare_page.dart';
+import '../features/savings/savings_page.dart';
+import '../features/settings/settings_page.dart';
+
 class FinovaApp extends StatefulWidget {
   const FinovaApp({super.key});
 
@@ -43,7 +49,6 @@ class _FinovaAppState extends State<FinovaApp> {
   }
 }
 
-/// Inherited scope for FinovaApp state
 class _FinovaScope extends InheritedWidget {
   final _FinovaAppState state;
   const _FinovaScope({required this.state, required super.child});
@@ -52,7 +57,6 @@ class _FinovaScope extends InheritedWidget {
   bool updateShouldNotify(covariant _FinovaScope oldWidget) => true;
 }
 
-/// Root shell (Bottom navigation)
 class _RootShell extends StatefulWidget {
   const _RootShell();
 
@@ -68,43 +72,6 @@ class _RootShellState extends State<_RootShell> {
     final isArabic = FinovaApp.of(context).lang == AppLang.ar;
 
     final pages = <Widget>[
-      // لازم تكون موجودة عندك في المسارات دي
-      // لو أسماء/مسارات الصفحات مختلفة عندك، ابعتهالي وأنا أضبطها
-      const _LazyPage(importPath: 'features/loan/loan_page.dart', className: 'LoanPage'),
-      const _LazyPage(importPath: 'features/compare/compare_page.dart', className: 'ComparePage'),
-      const _LazyPage(importPath: 'features/savings/savings_page.dart', className: 'SavingsPage'),
-      const _LazyPage(importPath: 'features/settings/settings_page.dart', className: 'SettingsPage'),
-    ];
-
-    // NOTE: _LazyPage مجرد placeholder لتجنب كراش لو حد غيّر أسماء
-    // ولكن لأن Flutter لا يدعم import ديناميكي، هنستخدم Widgets بسيطة بدلها
-    // الحل العملي: استورد الصفحات مباشرة (أسفل) — الأفضل.
-    // ---------------------------------------------------
-    // بما إن مشروعك بالفعل فيه الصفحات، هنستوردها مباشرة بدل placeholder:
-    return _DirectRootShell(isArabic: isArabic, index: index, onIndex: (v) => setState(() => index = v));
-  }
-}
-
-// ✅ استيراد الصفحات مباشرة (الطريقة الصحيحة)
-import '../features/loan/loan_page.dart';
-import '../features/compare/compare_page.dart';
-import '../features/savings/savings_page.dart';
-import '../features/settings/settings_page.dart';
-
-class _DirectRootShell extends StatelessWidget {
-  final bool isArabic;
-  final int index;
-  final ValueChanged<int> onIndex;
-
-  const _DirectRootShell({
-    required this.isArabic,
-    required this.index,
-    required this.onIndex,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final pages = <Widget>[
       const LoanPage(),
       const ComparePage(),
       const SavingsPage(),
@@ -115,7 +82,7 @@ class _DirectRootShell extends StatelessWidget {
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: onIndex,
+        onDestinationSelected: (v) => setState(() => index = v),
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.calculate_outlined),
@@ -140,17 +107,5 @@ class _DirectRootShell extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-/// Placeholder (غير مستخدم فعليًا الآن) — سيبها عادي
-class _LazyPage extends StatelessWidget {
-  final String importPath;
-  final String className;
-  const _LazyPage({required this.importPath, required this.className});
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink();
   }
 }
